@@ -158,7 +158,7 @@ OTEL_RESOURCE_ATTRIBUTES=environment=development,cluster=local
 
 ## Metrics Exposed
 
-- `klag.consumer.lag[.sum/.max/.min]` - Consumer lag (per partition and aggregated)
+- `klag.consumer.lag[.sum/.max/.min]` - Consumer lag: base metric per partition; `.sum/.max/.min` aggregated per `consumer_group`+`topic` (group total via `sum by(consumer_group)(klag_consumer_lag_sum)`)
 - `klag.partition.log_end_offset`, `klag.partition.log_start_offset`
 - `klag.consumer.committed_offset`, `klag.consumer.group.state`
 - `klag.topic.partitions` - Partition count per topic
@@ -169,11 +169,11 @@ OTEL_RESOURCE_ATTRIBUTES=environment=development,cluster=local
 - `klag.hot_partition` - Partition throughput × 100 when statistically high (outlier)
 
 **Time-Based Lag Metrics:**
-- `klag.consumer.lag.ms` - Lag in milliseconds (`lag_ms = currentTime - committedMessageTimestamp`). **Primary:** linear interpolation between Kafka `listOffsets` log start/end timestamps and offsets. **Fallback:** poll-time `(logEndOffset, systemTime)` history when Kafka timestamps are invalid (e.g. `logStartTimestamp=0`); requires 2+ poll intervals and does not extrapolate beyond the oldest retained sample (`TIME_LAG_INTERPOLATION_BUFFER_SIZE`).
+- `klag.consumer.lag.ms` - Lag in milliseconds (`lag_ms = currentTime - committedMessageTimestamp`). **Primary:** linear interpolation between Kafka `listOffsets` log start/end timestamps and offsets. **Fallback:** poll-time `(logEndOffset, systemTime)` history when Kafka timestamps are invalid (e.g. `logStartTimestamp=0`); requires 2+ poll intervals and does not extrapolate beyond the oldest retained sample (`TIME_LAG_INTERPOLATION_BUFFER_SIZE`). Emitted both per-partition (`partition` tag) and as a topic-level aggregate = max across partitions (no `partition` tag); select the rollup with `{partition=""}`, drill down with `{partition!=""}`.
 - `klag.consumer.lag.time_to_close_seconds` - Estimated seconds until lag reaches zero (only when catching up and lag > threshold)
 
 **Data Loss Prevention (DLP) Metrics:**
-- `klag.consumer.lag.retention_percent` - Percentage of retention window consumed by lag (value × 100 for precision); enables alerting before data loss. Formula: `(lag / (logEndOffset - logStartOffset)) * 100`. Value of 100% means data loss has occurred (consumer behind logStartOffset). Excludes empty partitions.
+- `klag.consumer.lag.retention_percent` - Percentage of retention window consumed by lag (value × 100 for precision); enables alerting before data loss. Formula: `(lag / (logEndOffset - logStartOffset)) * 100`. Value of 100% means data loss has occurred (consumer behind logStartOffset). Excludes empty partitions. Emitted both per-partition (`partition` tag) and as a topic-level aggregate = max across partitions (no `partition` tag); same `{partition=""}` / `{partition!=""}` selection as `klag.consumer.lag.ms`.
 
 **Commit Freshness Metrics:**
 - `klag.consumer.commit.staleness_seconds` - Seconds since the committed offset last advanced for a group+topic. Only reported while lag > 0 (a frozen-but-idle consumer is not stuck). High/rising = a wedged consumer with pending work that lag alone misses. Inferred — Kafka exposes no commit timestamp, so this measures time since klag *observed* a commit and resets on klag restart.
@@ -183,8 +183,8 @@ OTEL_RESOURCE_ATTRIBUTES=environment=development,cluster=local
 
 Note: `klag.hot_partition` only has `topic` and `partition` tags (throughput is partition-level, independent of consumers)
 Note: `klag.partition.under_replicated` only has `topic` and `partition` tags (ISR status is partition-level, independent of consumers)
-Note: Time-based lag metrics only have `consumer_group` and `topic` tags (per-topic granularity)
-Note: DLP metrics only have `consumer_group` and `topic` tags (per-topic granularity)
+Note: `klag.consumer.lag.time_to_close_seconds` has only `consumer_group` and `topic` tags (per-topic granularity, trend metric)
+Note: `klag.consumer.lag.ms` and `klag.consumer.lag.retention_percent` have `consumer_group`+`topic` for the aggregate series and additionally `partition` for the per-partition series (aggregate = topic-level max, no `partition` tag; select rollups with `{partition=""}`, per-partition with `{partition!=""}`)
 Note: Commit freshness metric only has `consumer_group` and `topic` tags (per-topic granularity)
 Note: when `CONSUMER_MEMBER_LABELS_ENABLED=true` (default), `klag.consumer.lag` (per-partition) and `klag.consumer.committed_offset` also carry `member_host`/`consumer_id`/`client_id` for the owning consumer instance (empty strings when unowned). Partition-level `klag.partition.log_*_offset` metrics stay member-agnostic. Members rotate on rebalance, so these series churn; the two-phase stale-gauge cleanup retires old owners within 1–2 intervals.
 Note: `klag.consumer.group.state` carries the state as a *tag*; on a state change the old-state series survives 1–2 collection intervals (two-phase stale-gauge cleanup), so both states export during that window. Key alerts on the most recent sample rather than series existence.

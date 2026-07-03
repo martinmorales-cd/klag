@@ -242,6 +242,10 @@ public class McpTools {
   private static JsonArray lagMsArray(List<LagMs> lagMsList) {
     JsonArray a = new JsonArray();
     for (LagMs l : lagMsList) {
+      // Keep the MCP snapshot per-topic: skip per-partition series (issue #55), emit aggregates only.
+      if (l.partition() != LagMs.AGGREGATE) {
+        continue;
+      }
       a.add(new JsonObject().put("topic", l.topic()).put("lagMs", l.lagMs())
         .put("lagMessages", l.lagMessages()));
     }
@@ -284,6 +288,10 @@ public class McpTools {
   private static JsonArray retentionArray(List<RetentionRisk> risks) {
     JsonArray a = new JsonArray();
     for (RetentionRisk r : risks) {
+      // Keep the MCP snapshot per-topic: skip per-partition series (issue #55), emit aggregates only.
+      if (r.partition() != RetentionRisk.AGGREGATE) {
+        continue;
+      }
       a.add(new JsonObject().put("topic", r.topic()).put("percent", r.percent()));
     }
     return a;

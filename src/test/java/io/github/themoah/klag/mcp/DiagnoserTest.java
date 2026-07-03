@@ -69,7 +69,7 @@ class DiagnoserTest {
   void dataLossIsCritical() {
     GroupSnapshot g = group("payments", State.STABLE, 9000,
       List.of(), List.of(), List.of(),
-      List.of(new RetentionRisk("payments", "orders", 100.0)),
+      List.of(new RetentionRisk("payments", "orders", RetentionRisk.AGGREGATE, 100.0)),
       List.of());
 
     Diagnosis d = Diagnoser.diagnose(g);
@@ -82,7 +82,7 @@ class DiagnoserTest {
   void approachingRetentionWarns() {
     GroupSnapshot g = group("payments", State.STABLE, 4000,
       List.of(), List.of(), List.of(),
-      List.of(new RetentionRisk("payments", "orders", 85.0)),
+      List.of(new RetentionRisk("payments", "orders", RetentionRisk.AGGREGATE, 85.0)),
       List.of());
 
     Diagnosis d = Diagnoser.diagnose(g);
@@ -176,7 +176,7 @@ class DiagnoserTest {
     GroupSnapshot g = group("payments", State.STABLE, 9000,
       List.of(new LagVelocity("payments", "orders", 99.0, 1000, 3)),
       List.of(), List.of(),
-      List.of(new RetentionRisk("payments", "orders", 100.0)),
+      List.of(new RetentionRisk("payments", "orders", RetentionRisk.AGGREGATE, 100.0)),
       List.of(new HotPartitionLag("payments", "orders", 1, 500, 100, 50, 3.0)));
 
     Diagnosis d = Diagnoser.diagnose(g);

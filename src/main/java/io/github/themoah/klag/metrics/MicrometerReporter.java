@@ -18,6 +18,7 @@ import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.vertx.core.Future;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -75,12 +76,24 @@ public class MicrometerReporter {
     log.debug("Reporting lag metrics for {} consumer groups", lagData.size());
 
     for (ConsumerGroupLag group : lagData) {
-      Tags groupTags = Tags.of("consumer_group", group.consumerGroup());
-
-      // Aggregated lag metrics
-      trackKey(activeKeys, recordGauge("klag.consumer.lag.sum", groupTags, group.totalLag()));
-      trackKey(activeKeys, recordGauge("klag.consumer.lag.max", groupTags, group.maxLag()));
-      trackKey(activeKeys, recordGauge("klag.consumer.lag.min", groupTags, group.minLag()));
+      // Per-topic aggregated lag metrics (issue #55: sum/max/min now carry a topic label).
+      // Group total is recoverable via sum by(consumer_group). Model-level
+      // totalLag()/maxLag()/minLag() stay group-level for MCP and the snapshot.
+      Map<String, long[]> topicAgg = new HashMap<>(); // topic -> [sum, max, min]
+      for (PartitionLag p : group.partitions()) {
+        long[] a = topicAgg.computeIfAbsent(
+          p.topic(), k -> new long[] {0, Long.MIN_VALUE, Long.MAX_VALUE});
+        a[0] += p.lag();
+        a[1] = Math.max(a[1], p.lag());
+        a[2] = Math.min(a[2], p.lag());
+      }
+      for (var e : topicAgg.entrySet()) {
+        Tags topicTags = Tags.of("consumer_group", group.consumerGroup(), "topic", e.getKey());
+        long[] a = e.getValue();
+        trackKey(activeKeys, recordGauge("klag.consumer.lag.sum", topicTags, a[0]));
+        trackKey(activeKeys, recordGauge("klag.consumer.lag.max", topicTags, a[1]));
+        trackKey(activeKeys, recordGauge("klag.consumer.lag.min", topicTags, a[2]));
+      }
 
       Map<TopicPartitionKey, MemberAssignment> groupOwners =
         owners.getOrDefault(group.consumerGroup(), Map.of());
@@ -299,6 +312,10 @@ public class MicrometerReporter {
         "consumer_group", lagMs.consumerGroup(),
         "topic", lagMs.topic()
       );
+      // partition == -1 is the topic-level aggregate: omit the tag so it stays a topic rollup.
+      if (lagMs.partition() >= 0) {
+        tags = tags.and("partition", String.valueOf(lagMs.partition()));
+      }
 
       trackKey(activeKeys, recordGauge("klag.consumer.lag.ms", tags, lagMs.lagMs()));
     }
@@ -339,6 +356,10 @@ public class MicrometerReporter {
         "consumer_group", risk.consumerGroup(),
         "topic", risk.topic()
       );
+      // partition == -1 is the topic-level aggregate: omit the tag so it stays a topic rollup.
+      if (risk.partition() >= 0) {
+        tags = tags.and("partition", String.valueOf(risk.partition()));
+      }
 
       // Store as integer (percent * 100) to preserve 2 decimal places
       long percentScaled = Math.round(risk.percent() * 100);
