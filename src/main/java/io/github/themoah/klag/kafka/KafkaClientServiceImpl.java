@@ -233,7 +233,8 @@ public class KafkaClientServiceImpl implements KafkaClientService {
             }
 
             result.add(new PartitionOffsets(topic, partition.partition(), logEndOffset, logStartOffset,
-              logEndTimestamp, maxTimestampOffset, logStartTimestamp));
+              logEndTimestamp, maxTimestampOffset, logStartTimestamp,
+              partition.replicas().size(), partition.inSyncReplicas().size()));
           }
 
           log.info("Retrieved offsets for {} partitions of topic {}", result.size(), topic);

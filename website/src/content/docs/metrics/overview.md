@@ -35,6 +35,14 @@ Reported **only when statistical outliers exist** (see [Hot Partitions](/metrics
 | `klag.hot_partition` | Partition throughput × 100 when statistically high. Tags: `topic`, `partition` only. |
 | `klag.hot_partition.lag` | Partition lag when statistically high. |
 
+## Under-replicated partitions (ISR)
+
+Reported **only when a partition is under-replicated** (see [ISR Monitoring](/metrics/isr/)):
+
+| Metric | Description |
+|---|---|
+| `klag.partition.under_replicated` | Missing in-sync replica count (`replicaCount - inSyncReplicaCount`). Tags: `topic`, `partition` only. |
+
 ## Time-based lag
 
 See [Time-Based Lag](/metrics/time-based-lag/). Tags: `consumer_group`, `topic`.

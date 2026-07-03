@@ -12,6 +12,7 @@ import io.github.themoah.klag.model.LagVelocity;
 import io.github.themoah.klag.model.MemberAssignment;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -259,6 +260,28 @@ public class MicrometerReporter {
       // Report throughput scaled by 100 to preserve 2 decimal places of precision
       long throughputScaled = Math.round(hot.throughput() * 100);
       trackKey(activeKeys, recordGauge("klag.hot_partition", tags, throughputScaled));
+    }
+  }
+
+  /**
+   * Reports under-replicated partition metrics.
+   * Only reports partitions where the in-sync replica set is smaller than the full replica set.
+   *
+   * @param partitions list of detected under-replicated partitions
+   * @param activeKeys set to populate with active gauge keys (can be null)
+   */
+  public void reportUnderReplicatedPartitions(
+      List<UnderReplicatedPartition> partitions, Set<String> activeKeys) {
+    log.debug("Reporting {} under-replicated partition metrics", partitions.size());
+
+    for (UnderReplicatedPartition u : partitions) {
+      Tags tags = Tags.of(
+        "topic", u.topic(),
+        "partition", String.valueOf(u.partition())
+      );
+
+      long missingReplicas = u.replicaCount() - u.inSyncReplicaCount();
+      trackKey(activeKeys, recordGauge("klag.partition.under_replicated", tags, missingReplicas));
     }
   }
 

@@ -80,7 +80,7 @@ class MetricsCollectorChunkingTest {
       List<PartitionOffsets> result = new ArrayList<>();
       for (int p = 0; p < topicPartitions.get(topic); p++) {
         // logEndTimestamp=0 and logStartTimestamp=0: Kafka anchors invalid -> fallback path
-        result.add(new PartitionOffsets(topic, p, logEnd(), 0, 0, logEnd(), 0));
+        result.add(new PartitionOffsets(topic, p, logEnd(), 0, 0, logEnd(), 0, 3, 3));
       }
       return Future.succeededFuture(result);
     }

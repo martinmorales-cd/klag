@@ -17,6 +17,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -121,5 +122,19 @@ class SnapshotBuilderTest {
       List.of(hot));
 
     assertEquals(List.of(hot), snap.hotPartitionsByThroughput());
+  }
+
+  @Test
+  void filtersUnderReplicatedPartitionsToConsumingGroupsOnly() {
+    UnderReplicatedPartition ur = new UnderReplicatedPartition("orders", 0, 3, 2);
+
+    MetricsSnapshot snap = SnapshotBuilder.build(
+      1L,
+      List.of(groupLag("payments", "orders", 0, 100, 40), groupLag("other", "misc", 0, 10, 10)),
+      Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+      Map.of(), 1.0, Map.of(), List.of(ur));
+
+    assertEquals(List.of(ur), snap.group("payments").orElseThrow().underReplicatedPartitions());
+    assertTrue(snap.group("other").orElseThrow().underReplicatedPartitions().isEmpty());
   }
 }

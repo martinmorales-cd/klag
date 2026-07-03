@@ -41,6 +41,8 @@ public record MetricsSnapshot(
    * @param overallTrend group-level lag trend rollup
    * @param maxCommitStalenessSeconds max seconds since a lagging topic last advanced its committed
    *        offset (across topics with lag &gt; 0); -1 when no lagging topic or freshness disabled
+   * @param underReplicatedPartitions under-replicated partitions this group consumes (topic-level,
+   *        identical across groups sharing the topic)
    */
   public record GroupSnapshot(
     String consumerGroup,
@@ -57,7 +59,8 @@ public record MetricsSnapshot(
     List<StateTransition> recentTransitions,
     List<LagTrend> trends,
     Direction overallTrend,
-    long maxCommitStalenessSeconds
+    long maxCommitStalenessSeconds,
+    List<UnderReplicatedPartition> underReplicatedPartitions
   ) {
 
     /**
@@ -103,6 +106,32 @@ public record MetricsSnapshot(
     ) {
       this(consumerGroup, state, totalLag, maxLag, minLag, partitions, velocities, lagMs,
         timeToClose, retentionRisks, hotPartitionsByLag, recentTransitions, trends, overallTrend, -1);
+    }
+
+    /**
+     * Backward-compatible constructor defaulting under-replicated partitions to empty.
+     * Used by tests and callers that do not supply ISR data.
+     */
+    public GroupSnapshot(
+      String consumerGroup,
+      State state,
+      long totalLag,
+      long maxLag,
+      long minLag,
+      List<PartitionLag> partitions,
+      List<LagVelocity> velocities,
+      List<LagMs> lagMs,
+      List<TimeToCloseEstimate> timeToClose,
+      List<RetentionRisk> retentionRisks,
+      List<HotPartitionLag> hotPartitionsByLag,
+      List<StateTransition> recentTransitions,
+      List<LagTrend> trends,
+      Direction overallTrend,
+      long maxCommitStalenessSeconds
+    ) {
+      this(consumerGroup, state, totalLag, maxLag, minLag, partitions, velocities, lagMs,
+        timeToClose, retentionRisks, hotPartitionsByLag, recentTransitions, trends, overallTrend,
+        maxCommitStalenessSeconds, List.of());
     }
   }
 

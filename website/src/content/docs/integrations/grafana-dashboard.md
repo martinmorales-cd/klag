@@ -34,6 +34,7 @@ Pick either path:
 - **Consumer Group Health**: state table with alerts for unhealthy states.
 - **Partition & Offset Details**: topic throughput and per-partition lag.
 - **Hot Partition Detection**: count, table, and time series.
+- **Under-Replicated Partitions (ISR)**: count, table, and time series.
 - **Time-Based Lag**: max time lag, groups catching up, time-to-close charts.
 - **Data Loss Prevention**: retention-risk and at-risk topics panels.
 - **JVM panels**: memory, GC pause, threads, CPU, allocation rate, loaded classes.

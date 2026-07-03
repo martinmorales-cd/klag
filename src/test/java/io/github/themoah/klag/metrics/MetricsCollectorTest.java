@@ -1,11 +1,15 @@
 package io.github.themoah.klag.metrics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.themoah.klag.model.ConsumerGroupLag.PartitionLag;
+import io.github.themoah.klag.model.PartitionOffsets;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -296,5 +300,67 @@ public class MetricsCollectorTest {
     assertEquals(25.0, percent1, 0.001);
     assertEquals(28.571, percent2, 0.001);
     assertTrue(percent2 > percent1, "Percentage should increase as retention window shrinks");
+  }
+
+  // ==========================================================================
+  // Under-Replicated Partition (ISR) Tests
+  // ==========================================================================
+
+  // PartitionOffsets ctor: topic, partition, logEndOffset, logStartOffset, logEndTimestamp,
+  //   maxTimestampOffset, logStartTimestamp, replicaCount, inSyncReplicaCount
+
+  @Test
+  void detectUnderReplicated_fullyInSync_empty() {
+    PartitionOffsets po = new PartitionOffsets("topic1", 0, 1000, 0, 0L, 1000, 0L, 3, 3);
+    assertTrue(MetricsCollector.detectUnderReplicated(List.of(po)).isEmpty(),
+      "Fully in-sync partition is not under-replicated");
+  }
+
+  @Test
+  void detectUnderReplicated_oneMissingReplica_flagged() {
+    PartitionOffsets po = new PartitionOffsets("topic1", 0, 1000, 0, 0L, 1000, 0L, 3, 2);
+    List<UnderReplicatedPartition> result = MetricsCollector.detectUnderReplicated(List.of(po));
+
+    assertEquals(1, result.size());
+    UnderReplicatedPartition u = result.get(0);
+    assertEquals("topic1", u.topic());
+    assertEquals(0, u.partition());
+    assertEquals(3, u.replicaCount());
+    assertEquals(2, u.inSyncReplicaCount());
+  }
+
+  @Test
+  void detectUnderReplicated_noInSyncReplicas_flagged() {
+    // replicaCount=3, inSyncReplicaCount=0 (Diagnoser escalates this to CRITICAL)
+    PartitionOffsets po = new PartitionOffsets("topic1", 0, 1000, 0, 0L, 1000, 0L, 3, 0);
+    List<UnderReplicatedPartition> result = MetricsCollector.detectUnderReplicated(List.of(po));
+
+    assertEquals(1, result.size());
+    assertEquals(0, result.get(0).inSyncReplicaCount());
+  }
+
+  @Test
+  void detectUnderReplicated_mixed_returnsOnlyUnderReplicated() {
+    PartitionOffsets inSync = new PartitionOffsets("topicA", 0, 1000, 0, 0L, 1000, 0L, 3, 3);
+    PartitionOffsets under = new PartitionOffsets("topicB", 2, 1000, 0, 0L, 1000, 0L, 3, 1);
+    List<UnderReplicatedPartition> result =
+      MetricsCollector.detectUnderReplicated(List.of(inSync, under));
+
+    assertEquals(1, result.size());
+    assertEquals("topicB", result.get(0).topic());
+    assertEquals(2, result.get(0).partition());
+  }
+
+  @Test
+  void detectUnderReplicated_empty_empty() {
+    assertTrue(MetricsCollector.detectUnderReplicated(List.of()).isEmpty());
+  }
+
+  @Test
+  void underReplicatedPartition_rejectsBrokenInvariant() {
+    assertThrows(IllegalArgumentException.class,
+      () -> new UnderReplicatedPartition("t", 0, 3, 4)); // isr > replicas
+    assertThrows(IllegalArgumentException.class,
+      () -> new UnderReplicatedPartition("t", 0, 3, -1)); // negative isr
   }
 }

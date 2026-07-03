@@ -31,9 +31,11 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.PartitionOffsets;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -62,6 +64,7 @@ public class MetricsCollector {
   private final TimeLagEstimator timeLagEstimator;
   private final OffsetTimestampTracker offsetTimestampTracker;
   private final CommitFreshnessTracker commitFreshnessTracker;  // null when disabled
+  private final boolean isrEnabled;
   private final ChunkConfig chunkConfig;
 
   private final Map<String, Integer> cachedGroupPartitionCounts = new ConcurrentHashMap<>();
@@ -159,6 +162,7 @@ public class MetricsCollector {
     this.commitFreshnessTracker = CommitFreshnessConfig.fromEnvironment().enabled()
       ? new CommitFreshnessTracker()
       : null;
+    this.isrEnabled = IsrConfig.fromEnvironment().enabled();
     this.chunkConfig = chunkConfig;
   }
 
@@ -505,6 +509,14 @@ public class MetricsCollector {
       }
     }
 
+    // Under-replicated partition (ISR) detection, from data already fetched this cycle.
+    List<UnderReplicatedPartition> underReplicated = isrEnabled
+      ? calculateUnderReplicatedPartitions(topicPartitions.keySet())
+      : List.of();
+    if (!underReplicated.isEmpty()) {
+      reporter.reportUnderReplicatedPartitions(underReplicated, activeKeys);
+    }
+
     // Aggregate partition data by topic for velocity tracking
     Map<String, Map<String, TopicAggregates>> groupTopicAggregates = new HashMap<>();
     for (ConsumerGroupLag group : lagData) {
@@ -612,7 +624,7 @@ public class MetricsCollector {
       }
       MetricsSnapshot partial = SnapshotBuilder.build(0L, lagData, stateData, velocities,
         lagMsData, timeToCloseEstimates, retentionRisks, hotByLag, hotByThroughput,
-        transitionsByGroup, lagTrendDeadband, stalenessByGroup);
+        transitionsByGroup, lagTrendDeadband, stalenessByGroup, underReplicated);
       cycleSnapshot.groups.addAll(partial.groups());
       cycleSnapshot.throughput.addAll(hotByThroughput);
     }
@@ -771,6 +783,46 @@ public class MetricsCollector {
     }
 
     return risks;
+  }
+
+  /**
+   * Detects under-replicated partitions among the topics observed this chunk, using the ISR/replica
+   * counts already fetched by {@link #getLogEndOffsetsCached}. No new Kafka calls.
+   *
+   * @param topics topics to check (this chunk's {@code topicPartitions.keySet()})
+   * @return under-replicated partitions found (empty when none or data not yet resolved)
+   */
+  private List<UnderReplicatedPartition> calculateUnderReplicatedPartitions(Set<String> topics) {
+    List<UnderReplicatedPartition> result = new ArrayList<>();
+    for (String topic : topics) {
+      Future<List<PartitionOffsets>> future = cycleTopicOffsets.get(topic);
+      if (future == null || !future.succeeded()) {
+        // Offset metadata failed/absent this cycle -> ISR goes blind for this topic. Failures
+        // tend to happen exactly when ISR shrinks, so log rather than skip silently.
+        log.warn("Skipping ISR check for topic {}: offset metadata unavailable this cycle", topic);
+        continue;
+      }
+      result.addAll(detectUnderReplicated(future.result()));
+    }
+    if (!result.isEmpty()) {
+      log.debug("Detected {} under-replicated partitions", result.size());
+    }
+    return result;
+  }
+
+  /**
+   * Pure detection: returns the partitions whose in-sync replica set is smaller than their full
+   * replica set. Package-visible and static so it is testable without a collector/Kafka harness.
+   */
+  static List<UnderReplicatedPartition> detectUnderReplicated(Collection<PartitionOffsets> partitions) {
+    List<UnderReplicatedPartition> result = new ArrayList<>();
+    for (PartitionOffsets po : partitions) {
+      if (po.inSyncReplicaCount() < po.replicaCount()) {
+        result.add(new UnderReplicatedPartition(
+          po.topic(), po.partition(), po.replicaCount(), po.inSyncReplicaCount()));
+      }
+    }
+    return result;
   }
 
   /**

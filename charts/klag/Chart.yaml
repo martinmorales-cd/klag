@@ -3,7 +3,7 @@ name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
 version: 0.3.4
-appVersion: "0.2.6"
+appVersion: "0.2.7"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
 sources:
@@ -32,11 +32,13 @@ annotations:
       url: https://github.com/themoah/klag/blob/main/README.md
   artifacthub.io/images: |
     - name: klag
-      image: themoah/klag:0.2.6
+      image: themoah/klag:0.2.7
   artifacthub.io/maintainers: |
     - name: themoah
       email: aviv@dozorets.com
   artifacthub.io/changes: |
+    - kind: added
+      description: ISR (in-sync replica) monitoring - klag.partition.under_replicated flags partitions with fewer in-sync replicas than configured; surfaced in the diagnose MCP tool; opt out with ISR_ENABLED=false
     - kind: added
       description: Per-consumer-instance member labels (member_host, consumer_id, client_id) on consumer-owned lag metrics for kafka-lag-exporter parity; opt out with CONSUMER_MEMBER_LABELS_ENABLED=false
     - kind: fixed

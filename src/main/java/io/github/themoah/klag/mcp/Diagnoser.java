@@ -6,6 +6,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -67,6 +68,7 @@ public final class Diagnoser {
     addStateFinding(g, findings);
     addStateChurnFinding(g, findings);
     addRetentionFinding(g, findings);
+    addUnderReplicatedFinding(g, findings);
     addVelocityFindings(g, findings);
     addHotPartitionFinding(g, findings);
     addStuckConsumerFinding(g, findings);
@@ -129,6 +131,22 @@ public final class Diagnoser {
         String.format(Locale.ROOT,
           "Lag is %.0f%% of the retention window. If it keeps growing, messages will be lost "
           + "before they are consumed. Scale consumers or raise retention.", maxPercent)));
+    }
+  }
+
+  private static void addUnderReplicatedFinding(GroupSnapshot g, List<Finding> findings) {
+    for (UnderReplicatedPartition u : g.underReplicatedPartitions()) {
+      boolean noIsr = u.inSyncReplicaCount() == 0;
+      Severity severity = noIsr ? Severity.CRITICAL : Severity.WARNING;
+      String title = (noIsr ? "No in-sync replicas" : "Under-replicated partition") + " on " + u.topic();
+      findings.add(new Finding(severity, title, String.format(Locale.ROOT,
+        "Partition %d of topic %s has %d/%d in-sync replicas.%s", u.partition(), u.topic(),
+        u.inSyncReplicaCount(), u.replicaCount(),
+        noIsr
+          ? " No replica is currently in sync — the partition is unavailable for durable writes and"
+            + " at acute risk of data loss on leader failure."
+          : " Reduced fault tolerance; a further broker/replica failure risks data loss or"
+            + " unavailability for this partition.")));
     }
   }
 
