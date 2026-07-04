@@ -312,8 +312,8 @@ public class MicrometerReporter {
         "consumer_group", lagMs.consumerGroup(),
         "topic", lagMs.topic()
       );
-      // partition == -1 is the topic-level aggregate: omit the tag so it stays a topic rollup.
-      if (lagMs.partition() >= 0) {
+      // LagMs.AGGREGATE (-1) is the topic-level aggregate: omit the tag so it stays a topic rollup.
+      if (lagMs.partition() != LagMs.AGGREGATE) {
         tags = tags.and("partition", String.valueOf(lagMs.partition()));
       }
 
@@ -356,8 +356,8 @@ public class MicrometerReporter {
         "consumer_group", risk.consumerGroup(),
         "topic", risk.topic()
       );
-      // partition == -1 is the topic-level aggregate: omit the tag so it stays a topic rollup.
-      if (risk.partition() >= 0) {
+      // RetentionRisk.AGGREGATE (-1) is the topic-level aggregate: omit the tag so it stays a topic rollup.
+      if (risk.partition() != RetentionRisk.AGGREGATE) {
         tags = tags.and("partition", String.valueOf(risk.partition()));
       }
 

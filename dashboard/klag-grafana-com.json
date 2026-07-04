@@ -1241,7 +1241,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "klag_consumer_lag_ms{consumer_group=~\"$consumer_group\", topic=~\"$topic\"}",
+          "expr": "klag_consumer_lag_ms{consumer_group=~\"$consumer_group\", topic=~\"$topic\", partition=\"\"}",
           "legendFormat": "{{consumer_group}} - {{topic}}",
           "range": true
         }
@@ -1491,7 +1491,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(klag_consumer_lag_retention_percent{consumer_group=~\"$consumer_group\", topic=~\"$topic\"} > 5000) or vector(0)",
+          "expr": "count(klag_consumer_lag_retention_percent{consumer_group=~\"$consumer_group\", topic=~\"$topic\", partition=\"\"} > 5000) or vector(0)",
           "legendFormat": "At Risk",
           "range": true
         }
@@ -1593,7 +1593,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "klag_consumer_lag_retention_percent{consumer_group=~\"$consumer_group\", topic=~\"$topic\"} / 100",
+          "expr": "klag_consumer_lag_retention_percent{consumer_group=~\"$consumer_group\", topic=~\"$topic\", partition=\"\"} / 100",
           "legendFormat": "{{consumer_group}} - {{topic}}",
           "range": true
         }
@@ -1697,7 +1697,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "klag_consumer_lag_retention_percent{consumer_group=~\"$consumer_group\", topic=~\"$topic\"} / 100 > 50",
+          "expr": "klag_consumer_lag_retention_percent{consumer_group=~\"$consumer_group\", topic=~\"$topic\", partition=\"\"} / 100 > 50",
           "legendFormat": "__auto",
           "instant": true,
           "format": "table"

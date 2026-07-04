@@ -19,8 +19,8 @@ underscores). The logical metrics match kafka-lag-exporter one-to-one:
 | kafka-lag-exporter | Klag (Prometheus name) | Notes |
 |---|---|---|
 | `kafka_consumergroup_group_lag` | `klag_consumer_lag` | per partition |
-| `kafka_consumergroup_group_lag` (summed) | `klag_consumer_lag_sum` | per group |
-| `kafka_consumergroup_group_max_lag` | `klag_consumer_lag_max` | per group |
+| `kafka_consumergroup_group_lag` (summed) | `klag_consumer_lag_sum` | per group+topic; group total: `sum by (consumer_group)(klag_consumer_lag_sum)` |
+| `kafka_consumergroup_group_max_lag` | `klag_consumer_lag_max` | per group+topic; group max: `max by (consumer_group)(klag_consumer_lag_max)` |
 | `kafka_consumergroup_group_offset` | `klag_consumer_committed_offset` | committed offset |
 | `kafka_partition_latest_offset` | `klag_partition_log_end_offset` | partition end |
 | `kafka_partition_earliest_offset` | `klag_partition_log_start_offset` | partition start |
