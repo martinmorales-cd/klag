@@ -15,6 +15,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
@@ -212,5 +213,31 @@ class DiagnoserTest {
     Diagnosis d = Diagnoser.diagnose(groupWithStaleness(0, 9999));
 
     assertEquals(Severity.OK, d.overall());
+  }
+
+  // Builds a healthy STABLE group with the given under-replicated partitions and no other signals.
+  private static GroupSnapshot groupWithUnderReplicated(List<UnderReplicatedPartition> underReplicated) {
+    PartitionLag p = PartitionLag.of("orders", 0, 1000, 0, 0, 0, 1000);
+    return new GroupSnapshot("payments", State.STABLE, 0, 0, 0,
+      List.of(p), List.of(), List.of(), List.of(), List.of(), List.of(),
+      List.of(), List.of(), Direction.STABLE, -1, underReplicated);
+  }
+
+  @Test
+  void underReplicatedPartitionWarns() {
+    Diagnosis d = Diagnoser.diagnose(
+      groupWithUnderReplicated(List.of(new UnderReplicatedPartition("orders", 0, 3, 2))));
+
+    assertEquals(Severity.WARNING, d.overall());
+    assertTrue(hasFindingContaining(d, "under-replicated partition"));
+  }
+
+  @Test
+  void zeroInSyncReplicasEscalatesToCritical() {
+    Diagnosis d = Diagnoser.diagnose(
+      groupWithUnderReplicated(List.of(new UnderReplicatedPartition("orders", 0, 3, 0))));
+
+    assertEquals(Severity.CRITICAL, d.overall());
+    assertTrue(hasFindingContaining(d, "no in-sync replicas"));
   }
 }

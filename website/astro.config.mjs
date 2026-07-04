@@ -86,6 +86,7 @@ export default defineConfig({
             { label: 'Time-Based Lag', slug: 'metrics/time-based-lag' },
             { label: 'Hot Partitions', slug: 'metrics/hot-partitions' },
             { label: 'Data Loss Prevention', slug: 'metrics/data-loss-prevention' },
+            { label: 'ISR Monitoring', slug: 'metrics/isr' },
           ],
         },
         {

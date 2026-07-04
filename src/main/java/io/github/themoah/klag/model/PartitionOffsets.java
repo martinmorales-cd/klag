@@ -14,5 +14,7 @@ public record PartitionOffsets(
   long logStartOffset,
   long logEndTimestamp,
   long maxTimestampOffset,
-  long logStartTimestamp
+  long logStartTimestamp,
+  int replicaCount,
+  int inSyncReplicaCount
 ) {}

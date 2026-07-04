@@ -15,9 +15,11 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -113,11 +115,42 @@ public final class SnapshotBuilder {
     double lagTrendDeadband,
     Map<String, Long> stalenessByGroup
   ) {
+    return build(timestampMs, lagData, stateData, velocities, lagMsData, timeToClose,
+      retentionRisks, hotByLag, hotByThroughput, transitionsByGroup, lagTrendDeadband,
+      stalenessByGroup, List.of());
+  }
+
+  /**
+   * Builds a snapshot including under-replicated partition (ISR) data. See the 12-argument
+   * overload for the shared parameters.
+   *
+   * @param underReplicatedPartitions topic-level under-replicated partitions detected this cycle
+   *        (no consumer dimension); denormalized per group by matching against each group's own
+   *        consumed partitions
+   * @return the assembled snapshot
+   */
+  public static MetricsSnapshot build(
+    long timestampMs,
+    List<ConsumerGroupLag> lagData,
+    Map<String, ConsumerGroupState> stateData,
+    List<LagVelocity> velocities,
+    List<LagMs> lagMsData,
+    List<TimeToCloseEstimate> timeToClose,
+    List<RetentionRisk> retentionRisks,
+    List<HotPartitionLag> hotByLag,
+    List<HotPartitionThroughput> hotByThroughput,
+    Map<String, List<StateTransition>> transitionsByGroup,
+    double lagTrendDeadband,
+    Map<String, Long> stalenessByGroup,
+    List<UnderReplicatedPartition> underReplicatedPartitions
+  ) {
     Map<String, List<LagVelocity>> velByGroup = groupBy(velocities, LagVelocity::consumerGroup);
     Map<String, List<LagMs>> lagMsByGroup = groupBy(lagMsData, LagMs::consumerGroup);
     Map<String, List<TimeToCloseEstimate>> ttcByGroup = groupBy(timeToClose, TimeToCloseEstimate::consumerGroup);
     Map<String, List<RetentionRisk>> riskByGroup = groupBy(retentionRisks, RetentionRisk::consumerGroup);
     Map<String, List<HotPartitionLag>> hotByGroup = groupBy(hotByLag, HotPartitionLag::consumerGroup);
+    Map<String, UnderReplicatedPartition> underReplicatedByKey = underReplicatedPartitions.stream()
+      .collect(Collectors.toMap(u -> tpKey(u.topic(), u.partition()), u -> u, (a, b) -> a));
 
     List<GroupSnapshot> groups = new ArrayList<>(lagData.size());
     for (ConsumerGroupLag lag : lagData) {
@@ -126,6 +159,10 @@ public final class SnapshotBuilder {
       List<LagVelocity> groupVelocities = velByGroup.getOrDefault(group, List.of());
       List<LagTrend> trends = LagTrendClassifier.perTopic(groupVelocities, lagTrendDeadband);
       Direction overallTrend = LagTrendClassifier.overall(trends, lag.totalLag());
+      List<UnderReplicatedPartition> groupUnderReplicated = lag.partitions().stream()
+        .map(p -> underReplicatedByKey.get(tpKey(p.topic(), p.partition())))
+        .filter(Objects::nonNull)
+        .toList();
       groups.add(new GroupSnapshot(
         group,
         state,
@@ -141,11 +178,16 @@ public final class SnapshotBuilder {
         transitionsByGroup.getOrDefault(group, List.of()),
         trends,
         overallTrend,
-        stalenessByGroup.getOrDefault(group, -1L)
+        stalenessByGroup.getOrDefault(group, -1L),
+        groupUnderReplicated
       ));
     }
 
     return new MetricsSnapshot(timestampMs, List.copyOf(groups), List.copyOf(hotByThroughput));
+  }
+
+  private static String tpKey(String topic, int partition) {
+    return topic + ":" + partition;
   }
 
   private static <T> Map<String, List<T>> groupBy(List<T> items, Function<T, String> keyFn) {

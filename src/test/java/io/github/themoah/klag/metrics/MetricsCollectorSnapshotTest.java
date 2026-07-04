@@ -35,7 +35,7 @@ class MetricsCollectorSnapshotTest {
     @Override public Future<Set<String>> listTopics() { return Future.succeededFuture(Set.of("orders")); }
     @Override public Future<List<PartitionInfo>> listPartitions(String topic) { return Future.succeededFuture(List.of()); }
     @Override public Future<List<PartitionOffsets>> getLogEndOffsets(String topic) {
-      return Future.succeededFuture(List.of(new PartitionOffsets(topic, 0, 100, 0, 0, 100, 0)));
+      return Future.succeededFuture(List.of(new PartitionOffsets(topic, 0, 100, 0, 0, 100, 0, 3, 3)));
     }
     @Override public Future<ConsumerGroupOffsets> getConsumerGroupOffsets(String groupId) {
       return Future.succeededFuture(new ConsumerGroupOffsets(groupId,

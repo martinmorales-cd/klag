@@ -91,6 +91,7 @@ and [charts/klag/README.md](charts/klag/README.md).
 | `klag.consumer.lag.retention_percent` | Lag as % of available messages (data loss alerting) |
 | `klag.consumer.group.state` | Group health: Stable, Rebalancing, Dead, Empty           |
 | `klag.hot_partition[.lag]` | Partitions with statistically abnormal throughput         |
+| `klag.partition.under_replicated` | Partitions with fewer in-sync replicas than configured (ISR gap) |
 
 Full metrics reference and the pre-built [Grafana dashboard](https://klag.dev/integrations/grafana-dashboard/)
 are documented at [klag.dev/metrics](https://klag.dev/metrics/overview/). The dashboard is on

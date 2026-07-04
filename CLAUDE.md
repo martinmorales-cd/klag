@@ -95,6 +95,9 @@ Any `Env`-backed variable resolves in order (first non-blank wins): env var `NAM
 **Commit Freshness:**
 - `COMMIT_FRESHNESS_ENABLED` (true) - Track time since each group+topic last advanced its committed offset. Kafka exposes no commit timestamp, so freshness is *inferred*: klag timestamps when the observed committed offset changes. The clock starts at klag startup and resets on restart (it measures time since klag last *observed* a commit, not the absolute commit time). Staleness is only reported while lag > 0. The MCP `diagnose` stuck-consumer flag fires at 300s (constant; alert on the raw gauge at any threshold).
 
+**ISR (In-Sync Replica) Monitoring:**
+- `ISR_ENABLED` (true) - Detect and report under-replicated partitions (replica count > ISR count). Uses topic/partition metadata already fetched every cycle (`describeTopics`) — no additional Kafka calls or ACLs beyond what klag already requires.
+
 **MCP (AI agent access):**
 - `MCP_ENABLED` (false) - Expose the `/mcp` endpoint for AI agents (SRE/dev). Opt-in; zero impact when off.
 - `MCP_AUTH_TOKEN` (empty) - When set, requires `Authorization: Bearer <token>`. Empty = open (logged warning).
@@ -175,7 +178,11 @@ OTEL_RESOURCE_ATTRIBUTES=environment=development,cluster=local
 **Commit Freshness Metrics:**
 - `klag.consumer.commit.staleness_seconds` - Seconds since the committed offset last advanced for a group+topic. Only reported while lag > 0 (a frozen-but-idle consumer is not stuck). High/rising = a wedged consumer with pending work that lag alone misses. Inferred — Kafka exposes no commit timestamp, so this measures time since klag *observed* a commit and resets on klag restart.
 
+**ISR Metrics (conditional - only reported when a partition is under-replicated):**
+- `klag.partition.under_replicated` - Count of missing in-sync replicas (`replicaCount - inSyncReplicaCount`) for a partition currently under-replicated. Detects fault-tolerance loss (isr.size() < replicas.size()); does not compare against `min.insync.replicas`.
+
 Note: `klag.hot_partition` only has `topic` and `partition` tags (throughput is partition-level, independent of consumers)
+Note: `klag.partition.under_replicated` only has `topic` and `partition` tags (ISR status is partition-level, independent of consumers)
 Note: Time-based lag metrics only have `consumer_group` and `topic` tags (per-topic granularity)
 Note: DLP metrics only have `consumer_group` and `topic` tags (per-topic granularity)
 Note: Commit freshness metric only has `consumer_group` and `topic` tags (per-topic granularity)
@@ -205,6 +212,7 @@ A pre-built comprehensive Grafana dashboard is available in `dashboard/demo-dash
 - Topic throughput (log end offset rate)
 - Top 10 partition offset gaps
 - Hot Partition Detection (count, table, time series)
+- Under-Replicated Partitions (ISR) (count, table, time series)
 - Time-Based Lag Estimation (max time lag, groups catching up, time lag chart, time-to-close chart)
 - Commit Staleness by Consumer Group (seconds since last observed commit, while lagging)
 - Data Loss Prevention (max retention risk, at-risk topics count, retention percent chart, at-risk table)
