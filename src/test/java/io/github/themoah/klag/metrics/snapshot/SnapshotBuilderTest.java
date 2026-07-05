@@ -56,9 +56,9 @@ class SnapshotBuilderTest {
   @Test
   void routesPerTopicMetricsToOwningGroup() {
     LagVelocity vel = new LagVelocity("payments", "orders", 5.0, 1000, 3);
-    LagMs lagMs = new LagMs("payments", "orders", 60, 2000);
+    LagMs lagMs = new LagMs("payments", "orders", LagMs.AGGREGATE, 60, 2000);
     TimeToCloseEstimate ttc = new TimeToCloseEstimate("payments", "orders", 60, -2.0, 30, 3);
-    RetentionRisk risk = new RetentionRisk("payments", "orders", 12.5);
+    RetentionRisk risk = new RetentionRisk("payments", "orders", RetentionRisk.AGGREGATE, 12.5);
     HotPartitionLag hot = new HotPartitionLag("payments", "orders", 7, 999, 100, 50, 3.0);
 
     MetricsSnapshot snap = SnapshotBuilder.build(

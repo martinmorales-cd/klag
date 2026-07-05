@@ -765,12 +765,15 @@ public class MetricsCollector {
           percent = (p.lag() / (double) retentionWindow) * 100.0;
         }
 
+        // Per-partition series (issue #55) alongside the topic-level aggregate below.
+        risks.add(new RetentionRisk(group.consumerGroup(), p.topic(), p.partition(), percent));
         topicMaxPercent.merge(p.topic(), percent, Math::max);
       }
 
-      // Create RetentionRisk for each topic
+      // Topic-level aggregate (max across partitions)
       for (var entry : topicMaxPercent.entrySet()) {
-        risks.add(new RetentionRisk(group.consumerGroup(), entry.getKey(), entry.getValue()));
+        risks.add(new RetentionRisk(
+          group.consumerGroup(), entry.getKey(), RetentionRisk.AGGREGATE, entry.getValue()));
         if (log.isDebugEnabled()) {
           log.debug("Retention risk for {}:{}: {}%",
             group.consumerGroup(), entry.getKey(), String.format("%.2f", entry.getValue()));
@@ -859,6 +862,9 @@ public class MetricsCollector {
         var lagMs = LagMsCalculator.estimatePartitionLagMs(p, offsetTimestampTracker, currentTime);
 
         if (lagMs.isPresent()) {
+          // Per-partition series (issue #55) alongside the topic-level aggregate below.
+          lagMsList.add(new LagMs(
+            group.consumerGroup(), p.topic(), p.partition(), p.lag(), lagMs.getAsLong()));
           topicAggregates.computeIfAbsent(p.topic(), k -> new TopicLagMsAggregates())
             .add(lagMs.getAsLong(), p.lag());
           log.trace("Partition {}:{}:{} lag_ms={} (committed={})",
@@ -875,7 +881,8 @@ public class MetricsCollector {
         TopicLagMsAggregates agg = entry.getValue();
 
         if (agg.hasData()) {
-          lagMsList.add(new LagMs(group.consumerGroup(), topic, agg.totalLag(), agg.maxLagMs()));
+          lagMsList.add(new LagMs(
+            group.consumerGroup(), topic, LagMs.AGGREGATE, agg.totalLag(), agg.maxLagMs()));
           log.debug("Lag in ms for {}:{}: {} ms (lag_messages={}, partitions_sampled={})",
             group.consumerGroup(), topic, agg.maxLagMs(), agg.totalLag(), agg.count());
         }

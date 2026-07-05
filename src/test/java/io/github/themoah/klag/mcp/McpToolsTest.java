@@ -27,7 +27,7 @@ class McpToolsTest {
     return new GroupSnapshot(name, state, lag, lag, 0, List.of(p),
       List.of(new LagVelocity(name, "orders", velocity, 1000, 3)),
       List.of(), List.of(),
-      List.of(new RetentionRisk(name, "orders", retention)),
+      List.of(new RetentionRisk(name, "orders", RetentionRisk.AGGREGATE, retention)),
       List.of());
   }
 

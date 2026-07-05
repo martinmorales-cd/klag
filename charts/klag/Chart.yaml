@@ -38,6 +38,10 @@ annotations:
       email: aviv@dozorets.com
   artifacthub.io/changes: |
     - kind: added
+      description: Per-partition breakdown of klag.consumer.lag.ms and klag.consumer.lag.retention_percent (topic-level aggregate kept as the partition-less series; select it with {partition=""}, drill down with {partition!=""})
+    - kind: changed
+      description: klag.consumer.lag.sum/.max/.min now carry a topic label (per consumer_group+topic); the group total is recoverable via sum by(consumer_group)(klag_consumer_lag_sum)
+    - kind: added
       description: ISR (in-sync replica) monitoring - klag.partition.under_replicated flags partitions with fewer in-sync replicas than configured; surfaced in the diagnose MCP tool; opt out with ISR_ENABLED=false
     - kind: added
       description: Per-consumer-instance member labels (member_host, consumer_id, client_id) on consumer-owned lag metrics for kafka-lag-exporter parity; opt out with CONSUMER_MEMBER_LABELS_ENABLED=false
