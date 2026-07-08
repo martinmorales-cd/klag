@@ -1077,7 +1077,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(klag_consumer_lag_ms{consumer_group=~\"$consumer_group\", topic=~\"$topic\"})",
+          "expr": "max(klag_consumer_lag_ms{consumer_group=~\"$consumer_group\", topic=~\"$topic\", partition=\"\"})",
           "legendFormat": "Max Time Lag",
           "range": true
         }

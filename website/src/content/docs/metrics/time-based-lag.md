@@ -13,7 +13,10 @@ without throughput context. Klag also estimates lag in **time**.
 | `klag.consumer.lag.ms` | Lag in milliseconds: `currentTime − committedMessageTimestamp`. |
 | `klag.consumer.lag.time_to_close_seconds` | Estimated seconds until lag reaches zero (only when catching up and lag > threshold). |
 
-Both are tagged with `consumer_group` and `topic` (per-topic granularity).
+`klag.consumer.lag.ms` is emitted both as a topic aggregate tagged with `consumer_group` and
+`topic`, and as per-partition series tagged with `consumer_group`, `topic`, and `partition`.
+When `CONSUMER_MEMBER_LABELS_ENABLED=true`, the per-partition series also carry `member_host`,
+`consumer_id`, and `client_id`. `time_to_close_seconds` stays per-topic.
 
 ## How `lag.ms` is computed
 

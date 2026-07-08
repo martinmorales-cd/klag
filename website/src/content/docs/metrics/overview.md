@@ -20,11 +20,12 @@ All metrics are tagged with `consumer_group`, `topic`, and `partition` where app
 | `klag.topic.partitions` | Partition count per topic. |
 | `klag.consumer.group.state` | Group health: Stable, Rebalancing, Dead, Empty. |
 
-`klag.consumer.lag` (per-partition) and `klag.consumer.committed_offset` also carry
-`member_host`, `consumer_id`, and `client_id` tags identifying the consumer **instance** that
-owns each partition — handy for pinning lag to a specific pod. Unowned partitions (Empty/Dead
-groups) get empty-string values. Disable with `CONSUMER_MEMBER_LABELS_ENABLED=false` to cut
-cardinality. The partition-level `klag.partition.log_*_offset` metrics stay member-agnostic.
+`klag.consumer.lag`, per-partition `klag.consumer.lag.ms`, and
+`klag.consumer.committed_offset` also carry `member_host`, `consumer_id`, and `client_id` tags
+identifying the consumer **instance** that owns each partition — handy for pinning lag to a
+specific pod. Unowned partitions (Empty/Dead groups) get empty-string values. Disable with
+`CONSUMER_MEMBER_LABELS_ENABLED=false` to cut cardinality. Topic-level `lag.ms` aggregates and
+partition-level `klag.partition.log_*_offset` metrics stay member-agnostic.
 
 ## Hot partitions
 
@@ -45,7 +46,8 @@ Reported **only when a partition is under-replicated** (see [ISR Monitoring](/me
 
 ## Time-based lag
 
-See [Time-Based Lag](/metrics/time-based-lag/). Tags: `consumer_group`, `topic`.
+See [Time-Based Lag](/metrics/time-based-lag/). Topic aggregate tags: `consumer_group`, `topic`.
+Partition tags: `consumer_group`, `topic`, `partition`, plus optional member labels.
 
 | Metric | Description |
 |---|---|

@@ -501,6 +501,11 @@ public class MetricsCollector {
     Set<String> throughputKeys = cycle.throughputKeys;
     CycleSnapshot cycleSnapshot = cycle.snapshot;
     cycle.stateGroupKeys.addAll(stateData.keySet());
+    // Member ownership rides along on stateData (same describeConsumerGroups call) so
+    // consumer-owned partition series can carry member labels.
+    Map<String, Map<TopicPartitionKey, MemberAssignment>> partitionOwners = new HashMap<>();
+    stateData.forEach((group, s) -> partitionOwners.put(group, s.partitionOwners()));
+
     // Report topic partition counts (max partition number + 1)
     Map<String, Integer> topicPartitions = new HashMap<>();
     for (ConsumerGroupLag group : lagData) {
@@ -567,7 +572,7 @@ public class MetricsCollector {
 
     // Calculate lag in ms from timestamps
     List<LagMs> lagMsData = calculateLagMs(lagData, cycle.timeLagKeys);
-    reporter.reportLagMs(lagMsData, activeKeys);
+    reporter.reportLagMs(lagMsData, partitionOwners, activeKeys);
 
     // Time-to-close estimation (based on velocity data)
     List<TimeToCloseEstimate> timeToCloseEstimates = List.of();
@@ -591,10 +596,7 @@ public class MetricsCollector {
       reporter.reportRetentionPercent(retentionRisks, activeKeys);
     }
 
-    // Report lag and state metrics. Member ownership rides along on stateData (same
-    // describeConsumerGroups call) so consumer-owned lag series can carry member labels.
-    Map<String, Map<TopicPartitionKey, MemberAssignment>> partitionOwners = new HashMap<>();
-    stateData.forEach((group, s) -> partitionOwners.put(group, s.partitionOwners()));
+    // Report lag and state metrics.
     reporter.reportTopicPartitions(topicPartitions, activeKeys);
     reporter.reportLag(lagData, partitionOwners, activeKeys);
     reporter.reportConsumerGroupStates(stateData, activeKeys);
