@@ -305,6 +305,22 @@ public class MicrometerReporter {
    * @param activeKeys set to populate with active gauge keys (can be null)
    */
   public void reportLagMs(List<LagMs> lagMsData, Set<String> activeKeys) {
+    reportLagMs(lagMsData, Map.of(), activeKeys);
+  }
+
+  /**
+   * Reports lag in milliseconds (Kafka timestamps or poll-history fallback), optionally tagging
+   * per-partition series with the owning consumer member.
+   *
+   * @param lagMsData list of lag in milliseconds data
+   * @param owners per-group (topic,partition) -> owning member; ignored when member labels are
+   *               disabled. Aggregate topic rollups are never member-tagged.
+   * @param activeKeys set to populate with active gauge keys (can be null)
+   */
+  public void reportLagMs(
+      List<LagMs> lagMsData,
+      Map<String, Map<TopicPartitionKey, MemberAssignment>> owners,
+      Set<String> activeKeys) {
     log.debug("Reporting {} lag_ms metrics", lagMsData.size());
 
     for (LagMs lagMs : lagMsData) {
@@ -315,6 +331,12 @@ public class MicrometerReporter {
       // LagMs.AGGREGATE (-1) is the topic-level aggregate: omit the tag so it stays a topic rollup.
       if (lagMs.partition() != LagMs.AGGREGATE) {
         tags = tags.and("partition", String.valueOf(lagMs.partition()));
+        if (memberLabelsEnabled) {
+          Map<TopicPartitionKey, MemberAssignment> groupOwners =
+            owners.getOrDefault(lagMs.consumerGroup(), Map.of());
+          tags = tags.and(memberTags(groupOwners.get(
+            new TopicPartitionKey(lagMs.topic(), lagMs.partition()))));
+        }
       }
 
       trackKey(activeKeys, recordGauge("klag.consumer.lag.ms", tags, lagMs.lagMs()));

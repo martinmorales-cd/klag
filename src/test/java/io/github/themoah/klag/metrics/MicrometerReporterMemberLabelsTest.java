@@ -1,13 +1,16 @@
 package io.github.themoah.klag.metrics;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.github.themoah.klag.model.ConsumerGroupLag;
 import io.github.themoah.klag.model.ConsumerGroupLag.PartitionLag;
 import io.github.themoah.klag.model.ConsumerGroupOffsets.TopicPartitionKey;
+import io.github.themoah.klag.model.LagMs;
 import io.github.themoah.klag.model.MemberAssignment;
 import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +32,10 @@ class MicrometerReporterMemberLabelsTest {
 
   private static Map<String, Map<TopicPartitionKey, MemberAssignment>> owners(MemberAssignment a) {
     return Map.of("payments", Map.of(new TopicPartitionKey("orders", 0), a));
+  }
+
+  private static boolean hasTag(Meter m, String key) {
+    return m.getId().getTags().stream().anyMatch(t -> t.getKey().equals(key));
   }
 
   @Test
@@ -69,6 +76,41 @@ class MicrometerReporterMemberLabelsTest {
   }
 
   @Test
+  void enabledWithOwnerTagsPartitionLagMsWithMemberLabels() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    MicrometerReporter reporter = new MicrometerReporter(registry, true);
+
+    reporter.reportLagMs(List.of(
+      new LagMs("payments", "orders", LagMs.AGGREGATE, 10, 2000),
+      new LagMs("payments", "orders", 0, 10, 1500)
+    ), owners(new MemberAssignment("10.0.0.1", "consumer-1-abc", "svc-payments")), null);
+
+    assertNotNull(registry.find("klag.consumer.lag.ms")
+      .tag("consumer_group", "payments").tag("topic", "orders").tag("partition", "0")
+      .tag("member_host", "10.0.0.1").tag("consumer_id", "consumer-1-abc")
+      .tag("client_id", "svc-payments").gauge(),
+      "partition lag_ms series must carry member labels when enabled with an owner");
+
+    long aggregateCount = registry.find("klag.consumer.lag.ms").gauges().stream()
+      .filter(g -> !hasTag(g, "partition"))
+      .filter(g -> !hasTag(g, "member_host"))
+      .count();
+    assertEquals(1, aggregateCount, "topic-level lag_ms aggregate remains member-agnostic");
+  }
+
+  @Test
+  void enabledWithoutOwnerTagsPartitionLagMsWithEmptyStringLabels() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    MicrometerReporter reporter = new MicrometerReporter(registry, true);
+
+    reporter.reportLagMs(List.of(new LagMs("payments", "orders", 0, 10, 1500)), Map.of(), null);
+
+    assertNotNull(registry.find("klag.consumer.lag.ms")
+      .tag("partition", "0").tag("member_host", "").tag("consumer_id", "").tag("client_id", "")
+      .gauge(), "unowned lag_ms partition gets stable empty-string member labels");
+  }
+
+  @Test
   void disabledOmitsMemberLabels() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     MicrometerReporter reporter = new MicrometerReporter(registry, false);
@@ -81,6 +123,14 @@ class MicrometerReporterMemberLabelsTest {
     assertNotNull(registry.find("klag.consumer.lag")
       .tag("consumer_group", "payments").tag("topic", "orders").tag("partition", "0").gauge(),
       "plain lag series still present when disabled");
+
+    reporter.reportLagMs(List.of(new LagMs("payments", "orders", 0, 10, 1500)),
+      owners(new MemberAssignment("10.0.0.1", "consumer-1-abc", "svc-payments")), null);
+    assertNull(registry.find("klag.consumer.lag.ms").tag("member_host", "10.0.0.1").gauge(),
+      "no member_host tag on lag_ms when disabled");
+    assertNotNull(registry.find("klag.consumer.lag.ms")
+      .tag("consumer_group", "payments").tag("topic", "orders").tag("partition", "0").gauge(),
+      "plain lag_ms partition series still present when disabled");
   }
 
   @Test

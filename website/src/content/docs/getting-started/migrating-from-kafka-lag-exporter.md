@@ -46,7 +46,9 @@ The biggest change is the group label name:
 
 The per-consumer-instance labels — `member_host`, `consumer_id`, `client_id` — are **on by
 default** in Klag and identify which consumer instance owns each partition (the same labels you used
-to trace lag to a specific pod). They ride on `klag_consumer_lag` and `klag_consumer_committed_offset`.
+to trace lag to a specific pod). They ride on per-partition `klag_consumer_lag`,
+`klag_consumer_lag_ms`, and `klag_consumer_committed_offset` series. The topic-level
+`klag_consumer_lag_ms` aggregate is not member-tagged because it is a rollup across partitions.
 
 ### Keep existing dashboards working
 
@@ -75,7 +77,8 @@ CONSUMER_MEMBER_LABELS_ENABLED=false
 ```
 
 The partition-level `klag_partition_log_end_offset` / `log_start_offset` metrics never carry member
-labels (they describe the partition, not a consumer), matching kafka-lag-exporter's `kafka_partition_*`.
+labels (they describe the partition, not a consumer), matching kafka-lag-exporter's
+`kafka_partition_*`.
 
 ## Configuration mapping
 
