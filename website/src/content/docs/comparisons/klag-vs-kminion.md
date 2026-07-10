@@ -35,7 +35,8 @@ consumer-lag analysis and ships to Datadog and OTLP as well as Prometheus.
 |---|:---:|:---:|
 | Lag in messages | ✅ | ✅ |
 | Consumer group state | ✅ | ✅ |
-| Broker / topic / log-dir metrics | ❌ | ✅ |
+| Topic / partition metrics | ⚠️ limited | ✅ broad |
+| Broker / log-dir metrics | ❌ | ✅ |
 | End-to-end latency probes | ❌ | ✅ |
 | Lag velocity (growing/shrinking) | ✅ | ❌ |
 | Time-based lag (ms) + time-to-catch-up | ✅ | ❌ |

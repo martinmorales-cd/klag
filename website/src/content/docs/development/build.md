@@ -38,7 +38,7 @@ via `/metrics`. Nothing is mocked.
 ./scripts/e2e-test.sh                 # Full e2e + cleanup
 ./scripts/e2e-test.sh --auto-install  # Install k3d/kubectl/helm via Homebrew
 ./scripts/e2e-test.sh --skip-cleanup  # Keep the cluster for inspection
-KLAG_IMAGE=themoah/klag:0.1.12 ./scripts/e2e-test.sh   # Test a published image
+KLAG_IMAGE=themoah/klag:latest ./scripts/e2e-test.sh   # Test the current published image
 KAFKA_IMAGE=apache/kafka:3.7.0 ./scripts/e2e-test.sh   # Test an older broker
 ./scripts/e2e-test.sh --cleanup       # Delete the test cluster
 ```

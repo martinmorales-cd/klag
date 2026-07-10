@@ -17,7 +17,8 @@ Reported **only when an outlier exists** (so they stay quiet on healthy topics):
 | `klag.hot_partition.lag` | Partition lag on a hot partition specifically. |
 
 `klag.hot_partition` has only `topic` and `partition` tags, because throughput is
-partition-level and independent of any consumer.
+partition-level and independent of any consumer. `klag.hot_partition.lag` is
+consumer-specific and has `consumer_group`, `topic`, and `partition` tags.
 
 ## How detection works
 

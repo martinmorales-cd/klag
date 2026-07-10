@@ -50,7 +50,8 @@ head-to-head comparisons are Burrow and KMinion, both dedicated lag/exporter too
 | Commit staleness (stuck-consumer signal) | ✅ | ❌ | ❌ |
 | Lag status evaluation rules | ❌ | ✅ | ❌ |
 | Built-in notifiers (email/Slack/HTTP) | ❌ | ✅ | ❌ |
-| Broker / topic / log-dir metrics | ❌ | ❌ | ✅ |
+| Topic / partition metrics | ⚠️ limited | ❌ | ✅ broad |
+| Broker / log-dir metrics | ❌ | ❌ | ✅ |
 | Prometheus native | ✅ | ⚠️ separate exporter | ✅ |
 | Datadog / OTLP native | ✅ | ❌ | ❌ |
 | Read-only ACLs (DESCRIBE only) | ✅ | ✅ | ⚠️ writes for e2e |

@@ -46,6 +46,7 @@ The biggest change is the group label name:
 | `member_host` | `member_host` |
 | `consumer_id` | `consumer_id` |
 | `client_id` | `client_id` |
+| `is_simple_consumer` | No Klag equivalent. |
 
 Klag exports group state as the `state` tag on a separate
 `klag_consumer_group_state` metric.
@@ -104,10 +105,11 @@ Kafka client keys only. See the [Configuration Reference](/configuration/referen
 | `port` (Prometheus) | `HTTP_PORT` (scrape at `/metrics`) |
 | reporter selection | `METRICS_REPORTER=prometheus` (also `datadog`, `otlp`) |
 
-A minimal Prometheus setup:
+A minimal Prometheus setup is shown below. Replace the broker example with an address
+that resolves and is reachable from the Klag runtime:
 
 ```bash
-KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_BOOTSTRAP_SERVERS=broker.example.com:9092
 METRICS_REPORTER=prometheus
 METRICS_INTERVAL_MS=30000
 ```

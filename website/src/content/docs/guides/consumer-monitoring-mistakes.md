@@ -27,14 +27,29 @@ closing or not?"
 
 ## 3. Not monitoring consumer-group state
 
-A group can go `Empty` (all consumers gone) or thrash in `Rebalancing`/`Dead` while its
-lag looks static. If you only watch lag, a group that died quietly won't page you until
-the backlog is huge.
+A group can go `empty` (all consumers gone) or thrash through
+`preparing_rebalance` and `completing_rebalance` while its lag looks static. If you only
+watch lag, a group that reaches `dead` can stay quiet until the backlog is huge.
 
-**Instead:** alert on `klag_consumer_group_state`. `Empty` while a topic is still
-producing, or frequent `Rebalancing`, are early warnings. Klag's
-[MCP `diagnose`](/ai/mcp/) tool flags rebalance storms / flapping from state-change
-history.
+**Instead:** select `klag_consumer_group_state` by its lowercase `state` tag. The real
+values are `stable`, `preparing_rebalance`, `completing_rebalance`, `empty`, `dead`, and
+`unknown`; there is no generic `rebalancing` state. The gauge value is a state-change
+count, not an encoded state number.
+
+For example, detect an empty or dead group by label presence:
+
+```promql
+count by (consumer_group) (
+  klag_consumer_group_state{state=~"empty|dead"}
+) > 0
+```
+
+Use an alert `for` duration longer than one or two collection intervals because the
+previous state-tagged series is retired asynchronously after a transition. Sustained
+`preparing_rebalance` / `completing_rebalance` or repeated transitions are early
+warnings. Klag's [MCP `diagnose`](/ai/mcp/) tool raises a state-churn warning after
+three retained transitions. Because that history is not time-windowed, inspect
+`recentTransitions` before concluding that a group is flapping or in a rebalance storm.
 
 ## 4. No retention headroom alerting
 
@@ -44,7 +59,16 @@ lag "looks bad," data may already be gone.
 
 **Instead:** alert on [retention percent](/metrics/data-loss-prevention/)
 (`klag_consumer_lag_retention_percent`). It tells you how much of the retention window
-the lag has eaten — alert at 70–80%, well before the 100% data-loss cliff.
+the lag has eaten. The raw gauge is percentage × 100, so raw `8000` means 80%.
+For a topic-level alert at 80% or above, either compare
+`klag_consumer_lag_retention_percent{partition=""} >= 8000` or normalize it:
+
+```promql
+(klag_consumer_lag_retention_percent{partition=""} / 100) >= 80
+```
+
+This stays well below the 100% (raw `10000`) data-loss cliff and avoids mixing topic
+aggregates with per-partition series.
 
 ## 5. Per-pod / per-partition blind spots
 

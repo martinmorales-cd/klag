@@ -27,20 +27,102 @@ Streamable HTTP, **JSON-RPC 2.0 over POST**. A `GET` returns `405`.
 
 ## Tools
 
-| Tool | Purpose |
-|---|---|
-| `list_consumer_groups` | List groups, each with its `overallTrend`. |
-| `get_consumer_group_lag` | Lag detail for a group, plus `trends`, `overallTrend`, and `recentTransitions`. |
-| `find_lagging_groups` | Groups currently lagging, with `overallTrend`. |
-| `diagnose` | Composite severity assessment; flags frequent state changes (rebalance storm / flapping). |
+| Tool | Arguments | Response data |
+|---|---|---|
+| `list_consumer_groups` | None | Snapshot age and group count; each group has `group`, `state`, `totalLag`, `overallTrend`, and topic count. |
+| `get_consumer_group_lag` | Required `group` | Group totals and state; partition offsets and lag; velocity, trends, transitions, topic-level time lag, time-to-close, retention risk, and `commitStalenessSeconds`. |
+| `find_lagging_groups` | Optional `sortBy` (`lag`, `velocity`, or `retention`) and `limit` (default 10) | Ranked groups with state, total lag, trend, maximum velocity, maximum retention percentage, and `commitStalenessSeconds`. |
+| `diagnose` | Required `group` | Overall `severity`, `summary`, and findings with `severity`, `title`, and `detail`. |
+
+The tool payloads use these fields:
+
+- `list_consumer_groups`: `snapshotAgeMs`, `groupCount`, and `groups`. Each group has
+  `group`, `state`, `totalLag`, `overallTrend`, and `topics`.
+- `get_consumer_group_lag`: `group`, `state`, `totalLag`, `maxLag`, `minLag`,
+  `partitions`, `velocity`, `trends`, `overallTrend`, `recentTransitions`, `lagMs`,
+  `timeToClose`, `retentionRisk`, and `commitStalenessSeconds`. Partition entries include
+  `topic`, `partition`, `lag`, `committedOffset`, `logEndOffset`, and `logStartOffset`.
+  Velocity entries have `topic` and `messagesPerSec`; trend entries have `topic`,
+  `direction`, and `velocity`; transitions have `from`, `to`, `timestampMs`, and
+  `ageMs`; time-lag entries have `topic`, `lagMs`, and `lagMessages`; time-to-close
+  entries have `topic` and `estimatedSeconds`; retention entries have `topic` and
+  `percent`.
+- `find_lagging_groups`: `sortBy`, `limit`, and `groups`. Each result has `group`,
+  `state`, `totalLag`, `overallTrend`, `maxVelocity`, `maxRetentionPercent`, and
+  `commitStalenessSeconds`.
+- `diagnose`: `group`, `severity`, `summary`, and `findings`. Each finding has
+  `severity`, `title`, and `detail`.
+
+`commitStalenessSeconds` is the maximum across the group's lagging topics. `-1`
+means no staleness value is available. Klag infers this value from observed offset
+changes; it resets when Klag restarts. The raw value appears in
+`get_consumer_group_lag` and `find_lagging_groups`, not in the `diagnose` response.
 
 ## Trends and state history
 
 Each group snapshot carries a **basic lag trend** (`growing` / `shrinking` / `stable`,
 per-topic plus an `overallTrend` rollup) derived from
 [lag velocity](/metrics/lag-velocity/) via `LAG_TREND_DEADBAND_MSG_PER_SEC`, and a
-rolling **state-change history** (last 10 `from→to` transitions). `diagnose` uses the
-transition history to flag rebalance storms and flapping groups.
+rolling **state-change history** (last 10 `from→to` transitions). This history is not
+time-windowed. `diagnose` raises a state-churn warning after three retained transitions,
+but those transitions may be far apart; the warning then remains until Klag restarts or
+the group is cleaned up. Treat it as a triage prompt, not objective proof of frequent
+changes or a rebalance storm, and inspect `recentTransitions` timestamps and ages.
+
+## Diagnose checks and severity
+
+`diagnose` runs deterministic checks against the latest group snapshot. Overall
+severity is the highest finding in this order: `OK`, `INFO`, `WARNING`, `CRITICAL`.
+When no check produces a finding, it returns one `OK` finding.
+
+| Check | Finding |
+|---|---|
+| Group state | `DEAD` is `CRITICAL`; `EMPTY` is `WARNING`; rebalancing and `UNKNOWN` are `INFO`; `STABLE` adds no finding. |
+| State churn | Three retained transitions is `WARNING`. The retained history is not time-windowed, so inspect `recentTransitions` before concluding that changes are frequent or constitute a rebalance storm. |
+| Retention risk | At least 100% is `CRITICAL`; 80% to below 100% is `WARNING`. |
+| ISR | Each under-replicated partition consumed by the group is `WARNING`; zero in-sync replicas is `CRITICAL`. |
+| Growing lag | Positive topic velocity while total group lag is above zero is `WARNING`. |
+| Catching up | Negative velocity while total group lag is above 100 messages is `INFO`; the detail includes time-to-close when available. |
+| Hot partition | Each lag outlier in `hotPartitionsByLag` is `WARNING`. |
+| Stuck consumer | Total lag above zero plus `commitStalenessSeconds >= 300` is `WARNING`. |
+
+The stuck-consumer threshold is fixed at five minutes for `diagnose`. Alert on
+`klag.consumer.commit.staleness_seconds` if you need another threshold. ISR remains a
+partition-level signal; `diagnose` only includes under-replicated partitions present in
+the selected group's consumed partition set.
+
+## Raw JSON-RPC example
+
+Clients normally perform initialization and tool discovery. Klag's handler also accepts
+this minimal direct `tools/call`, the same request shape covered by its HTTP integration
+tests:
+
+```bash
+curl -sS http://localhost:8888/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <token>' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_consumer_groups","arguments":{}}}'
+```
+
+If `MCP_AUTH_TOKEN` is empty, omit the `Authorization` header. A representative
+response has the MCP tool result in `result.content[0].text`; that text is a JSON
+string containing the tool-specific payload:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"snapshotAgeMs\" : 125,\n  \"groupCount\" : 1,\n  \"groups\" : [ {\n    \"group\" : \"payments\",\n    \"state\" : \"stable\",\n    \"totalLag\" : 60,\n    \"overallTrend\" : \"growing\",\n    \"topics\" : 1\n  } ]\n}"
+      }
+    ],
+    "isError": false
+  }
+}
+```
 
 ## Connect from an AI client
 
@@ -133,6 +215,9 @@ Streamable-HTTP JSON-RPC POST endpoint, so any correct remote-MCP config will wo
 
 Once connected, ask the agent to `list_consumer_groups`, `find_lagging_groups`, or
 `diagnose` a specific group.
+
+For `401`, `405`, or snapshot-not-ready responses, see
+[Troubleshooting](/guides/troubleshooting/#mcp-401-405-or-empty-snapshot).
 
 ## Design
 

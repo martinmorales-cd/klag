@@ -64,8 +64,9 @@ Klag's [MCP `diagnose` tool](/ai/mcp/) applies this automatically. For a given g
 combines state, lag trend, retention risk, and hot partitions into a severity
 assessment, and **flags stuck consumers** (lag > 0 with a frozen committed offset) using
 a fixed 300-second threshold — so an SRE agent can ask "diagnose group X" and get the
-stuck signal without hand-writing PromQL. It also flags rebalance storms and flapping
-groups from the state-change history.
+stuck signal without hand-writing PromQL. It also raises a state-churn warning after
+three retained transitions. That history is not time-windowed, so inspect
+`recentTransitions` before treating the warning as a rebalance storm or flapping.
 
 ## Checklist
 

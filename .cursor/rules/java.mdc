@@ -1,0 +1,24 @@
+---
+globs:
+  - "src/**/*.java"
+alwaysApply: false
+---
+
+# Java conventions
+
+- Non-blocking only: Kafka/HTTP work via Vert.x `Future<T>`; no blocking calls on event loops
+- Model types are Java 21 records under `model/`
+- Config via `Env.resolve()` — env var → `-DNAME` → `-Dname.dotted` (env wins)
+- Logging: SLF4J; package loggers follow existing `logback.xml` levels (`LOG_LEVEL_*` env vars)
+
+## Testing
+
+- Unit tests mirror package layout under `src/test/java/`
+- Run `./gradlew test` before PRs; add tests for non-trivial metric or Kafka client behavior
+- Do not add tests that only assert obvious behavior
+
+## Kafka client notes
+
+- AdminClient only; read-only DESCRIBE ACLs (cluster, topic `*`, group `*`)
+- Request batching: `KAFKA_CHUNK_COUNT`, `KAFKA_CHUNK_DELAY_MS`
+- Kafka 2.x: `MAX_TIMESTAMP` listOffsets unsupported — falls back to LATEST (expected WARN once per process)

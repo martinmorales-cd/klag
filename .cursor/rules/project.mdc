@@ -1,0 +1,59 @@
+---
+description: "Klag project context, build commands, and architecture"
+alwaysApply: true
+---
+
+# Klag
+
+Kafka consumer lag exporter (Vert.x 4.5.22, Java 21). Monitors lag, velocity, hot partitions, time-based lag, commit freshness, ISR, and group state. Exports to Prometheus, Datadog, or OTLP.
+
+## Build
+
+```bash
+# Java 21 — sdk use java 21.0.9-tem
+./gradlew compileJava   # compile
+./gradlew test          # unit tests
+./gradlew assemble      # fat JAR
+./gradlew run           # hot-reload dev
+
+./scripts/test-helm-chart.sh    # Helm template tests (offline)
+./scripts/e2e-test.sh           # k3d + real Kafka e2e
+./scripts/e2e-strimzi-test.sh   # Strimzi/KRaft e2e
+```
+
+CI uses `gradle` directly (wrapper JAR is not committed). Local dev uses `./gradlew`.
+
+Native image: GraalVM JDK 21 + `gradle nativeCompile` → `build/native/nativeCompile/klag`. Entry point is `KlagLauncher` (no reflective Vert.x launcher).
+
+## Layout
+
+```
+src/main/java/io/github/themoah/klag/
+├── MainVerticle.java       # HTTP router, lifecycle
+├── config/                 # AppConfig, Env
+├── health/                 # probes, version
+├── kafka/                  # KafkaClientService[Impl]
+├── metrics/                # collector, reporter, velocity/hotpartition/timelag
+├── mcp/                    # read-only MCP snapshot tools
+└── model/                  # Java 21 records
+```
+
+## HTTP endpoints
+
+| Path | Purpose |
+|------|---------|
+| `/healthz` | Liveness (always 200) |
+| `/readyz` | Readiness (200 if Kafka up) |
+| `/metrics` | Prometheus scrape |
+| `/version` | Build info |
+| `/mcp` | MCP JSON-RPC (if `MCP_ENABLED=true`) |
+
+## Code style
+
+- Async APIs return `Future<T>`; use Java 21 records for DTOs
+- SLF4J + Logback; no stdout from application code
+- Config precedence: classpath `application.properties` → `KLAG_CONFIG_FILE` → env vars
+- Bump version in `build.gradle.kts` after minor/major changes
+- Minimize diff scope; match existing patterns; no drive-by refactors
+
+Full env var and metric reference: `CLAUDE.md`.

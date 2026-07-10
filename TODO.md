@@ -8,6 +8,7 @@ In any order:
 * ~~Hot Partition Detection - Flag partitions with disproportionate lag.~~
 * Track rebalance frequency—too many rebalances indicate instability.
 * ~~Java 21 and usage of virtual threads.~~
+* Enable virtual threads by default after benchmarking and compatibility validation.
 * Convert lag to estimate of seconds.
 * ~~Dockerfile~~ + Helm chart.
 * ~~Github actions~~.

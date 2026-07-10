@@ -5,7 +5,10 @@ description: Install Klag via the Helm chart, Docker, or a Docker environment fi
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-Klag ships as a Docker image and a Helm chart. Pick whichever matches your platform.
+Klag ships as a Docker image and a Helm chart. The bare application defaults
+`METRICS_REPORTER` to `none`, so Docker and binary deployments must select
+`prometheus`, `datadog`, or `otlp`. The Helm chart defaults `metrics.reporter` to
+`prometheus`.
 
 ## Helm chart
 
@@ -21,8 +24,8 @@ helm install klag klag/klag \
   --set kafka.bootstrapServers="kafka-broker:9092"
 ```
 
-Pin a specific version with `--version`, e.g.
-`helm install klag klag/klag --version 0.1.12 ...`.
+For repeatable deployments, choose a version from `helm search repo klag --versions`
+and pass it with `helm install --version <chart-version>`.
 
 <Tabs>
   <TabItem label="SASL authentication">
@@ -79,4 +82,6 @@ METRICS_JVM_ENABLED=true
 
 - [Configuration Reference](/configuration/reference/): all environment variables.
 - [ACL Permissions](/kafka/acl-permissions/): the read-only grants Klag needs.
+- [Troubleshooting](/guides/troubleshooting/): missing metrics, readiness, filters, and
+  ServiceMonitor discovery.
 - [Build from Source](/development/build/): for contributors.

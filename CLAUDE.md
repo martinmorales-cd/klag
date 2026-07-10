@@ -71,7 +71,7 @@ src/main/java/io/github/themoah/klag/
 
 ## Environment Variables
 
-**App:** `HTTP_PORT` (8888), `KAFKA_HEALTH_CHECK_INTERVAL_MS` (30000), `VERTX_USE_VIRTUAL_THREADS` (false), `KLAG_CONFIG_FILE` (path to external `application.properties`, optional)
+**App:** `HTTP_PORT` (8888), `KAFKA_HEALTH_CHECK_INTERVAL_MS` (30000), `VERTX_USE_VIRTUAL_THREADS` (true), `KLAG_CONFIG_FILE` (path to external `application.properties`, optional)
 
 Any `Env`-backed variable resolves in order (first non-blank wins): env var `NAME` → JVM property `-DNAME` → dotted `-Dname.dotted` (e.g. `HTTP_PORT` → `-Dhttp.port`). This lets jar/native users configure via `-D`; env keeps precedence. See `config/Env.java#resolve`.
 
