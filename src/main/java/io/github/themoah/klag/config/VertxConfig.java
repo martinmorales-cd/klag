@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Vert.x configuration with optional virtual threads support.
  * Enable via VERTX_USE_VIRTUAL_THREADS=true environment variable.
+ * Enabled by default when unset; set VERTX_USE_VIRTUAL_THREADS=false to disable.
  */
 public class VertxConfig {
 
@@ -34,6 +35,9 @@ public class VertxConfig {
 
   public static boolean isVirtualThreadsEnabled() {
     String value = System.getenv(ENV_USE_VIRTUAL_THREADS);
+    if (value == null || value.isBlank()) {
+      return true;
+    }
     return "true".equalsIgnoreCase(value);
   }
 }

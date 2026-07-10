@@ -44,6 +44,9 @@ export default defineConfig({
   // Short links for the README and external references.
   redirects: {
     '/migration': '/getting-started/migrating-from-kafka-lag-exporter/',
+    '/getting-started/comparison': '/comparisons/overview/',
+    '/comparisons': '/comparisons/overview/',
+    '/comparisons/': '/comparisons/overview/',
   },
 
   integrations: [
@@ -67,8 +70,20 @@ export default defineConfig({
             { label: 'Introduction', slug: 'getting-started/introduction' },
             { label: 'Quick Start', slug: 'getting-started/quick-start' },
             { label: 'Installation', slug: 'getting-started/installation' },
-            { label: 'Comparison', slug: 'getting-started/comparison' },
             { label: 'Migrating from kafka-lag-exporter', slug: 'getting-started/migrating-from-kafka-lag-exporter' },
+          ],
+        },
+        {
+          label: 'Comparisons',
+          items: [
+            { label: 'Overview', slug: 'comparisons/overview' },
+            { label: 'Klag vs Burrow', slug: 'comparisons/klag-vs-burrow' },
+            { label: 'Klag vs KMinion', slug: 'comparisons/klag-vs-kminion' },
+            { label: 'Klag vs AKHQ', slug: 'comparisons/klag-vs-akhq' },
+            { label: 'Klag vs Confluent Control Center', slug: 'comparisons/klag-vs-confluent-control-center' },
+            { label: 'Klag vs Redpanda Console', slug: 'comparisons/klag-vs-redpanda-console' },
+            { label: 'Klag vs Grafana', slug: 'comparisons/klag-vs-grafana' },
+            { label: 'Klag vs Cruise Control', slug: 'comparisons/klag-vs-cruise-control' },
           ],
         },
         {
@@ -87,6 +102,16 @@ export default defineConfig({
             { label: 'Hot Partitions', slug: 'metrics/hot-partitions' },
             { label: 'Data Loss Prevention', slug: 'metrics/data-loss-prevention' },
             { label: 'ISR Monitoring', slug: 'metrics/isr' },
+          ],
+        },
+        {
+          label: 'Guides',
+          items: [
+            { label: 'How Kafka Consumer Lag Works', slug: 'guides/how-kafka-consumer-lag-works' },
+            { label: "Why Lag Value Alone Isn't Enough", slug: 'guides/why-lag-value-is-not-enough' },
+            { label: 'Common Monitoring Mistakes', slug: 'guides/consumer-monitoring-mistakes' },
+            { label: 'Detect Stuck Consumers', slug: 'guides/detect-stuck-consumers' },
+            { label: 'Troubleshooting', slug: 'guides/troubleshooting' },
           ],
         },
         {

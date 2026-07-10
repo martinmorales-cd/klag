@@ -13,14 +13,19 @@ It is inspired by [kafka-lag-exporter](https://github.com/seglo/kafka-lag-export
 
 ## Why consumer lag matters
 
-Consumer lag is the gap between what Kafka has **produced** and what your consumers
-have **processed**. Left unmonitored, growing lag leads to:
+Consumer lag is the gap between a partition's log-end offset and the consumer group's
+**committed offset**. It is a useful proxy for work not yet acknowledged by the group,
+not proof that every record before the commit completed business processing. Left
+unmonitored, growing lag leads to:
 
 - **Stale data** in downstream systems.
 - **Memory pressure** as consumers struggle to catch up.
 - **Silent failures** when consumer groups die without alerts.
 
 Klag surfaces these problems early, with enough signal to act before users notice.
+Monitoring lag and group health is an essential operational practice for production
+Kafka; Klag is one exporter that can supply those signals to your existing observability
+stack.
 
 ## Key features
 
@@ -29,15 +34,15 @@ Klag surfaces these problems early, with enough signal to act before users notic
 | **Lag velocity** | Know if lag is growing or shrinking, to catch problems before they escalate. |
 | **Time-based lag estimation** | See lag in seconds/minutes, beyond raw message counts. |
 | **Hot partition detection** | Find partitions with uneven load causing bottlenecks. |
-| **Consumer group state tracking** | Alert on Rebalancing, Dead, or Empty states. |
+| **Consumer group state tracking** | Alert on `preparing_rebalance`, `completing_rebalance`, `dead`, or `empty` states. |
 | **Request batching** | Safely monitor large clusters without overwhelming brokers. |
 | **Stale group cleanup** | Automatically stops reporting deleted/inactive groups. |
 | **Data loss prevention** | Catch the case where lag exceeds retention and data is lost. |
 
-## Scales to large clusters
+## Control collection load
 
-Klag monitors thousands of consumer groups in ~50 MB heap. Request batching with
-configurable delays lets it fetch offsets for 500+ groups without spiking broker CPU.
+Request batching with configurable delays lets you spread offset requests across a
+collection cycle and control broker load on larger clusters.
 See [Group Filtering](/configuration/group-filtering/) and the `KAFKA_CHUNK_COUNT` /
 `KAFKA_CHUNK_DELAY_MS` settings in the [Configuration Reference](/configuration/reference/).
 
@@ -52,4 +57,4 @@ Kafka and Confluent Cloud.
 - [Quick Start](/getting-started/quick-start/): run Klag in one command.
 - [Installation](/getting-started/installation/): Helm, Docker, and env-file setups.
 - [Metrics Overview](/metrics/overview/): the full list of what Klag exposes.
-- [Comparison](/getting-started/comparison/): Klag vs Burrow vs KMinion.
+- [Comparisons](/comparisons/overview/): Klag vs Burrow, KMinion, AKHQ, Grafana, and more.

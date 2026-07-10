@@ -6,7 +6,9 @@ description: The full catalog of metrics Klag exposes, covering consumer lag, of
 Klag exports its metrics through Micrometer, so the exact name format depends on the
 reporter (Prometheus, Datadog, or OTLP). The logical metrics are the same everywhere.
 
-All metrics are tagged with `consumer_group`, `topic`, and `partition` where applicable.
+Tags depend on the metric's scope. Consumer metrics commonly use `consumer_group`,
+topic-level metrics add `topic`, and only partition-level series add `partition`.
+Broker/topic signals such as throughput and ISR do not have a `consumer_group` tag.
 
 ## Core lag and offsets
 
@@ -14,11 +16,24 @@ All metrics are tagged with `consumer_group`, `topic`, and `partition` where app
 |---|---|
 | `klag.consumer.lag` | Current lag per partition (also `.sum`, `.max`, `.min`). |
 | `klag.consumer.lag.velocity` | Rate of change; positive means falling behind. See [Lag Velocity](/metrics/lag-velocity/). |
-| `klag.consumer.committed_offset` | Last committed offset per consumer. |
+| `klag.consumer.committed_offset` | Last committed offset per partition. |
 | `klag.partition.log_end_offset` | Latest offset per partition. |
 | `klag.partition.log_start_offset` | Earliest available offset per partition. |
 | `klag.topic.partitions` | Partition count per topic. |
-| `klag.consumer.group.state` | Group health: Stable, Rebalancing, Dead, Empty. |
+| `klag.consumer.group.state` | Consumer-group state and observed state-change count. |
+
+### Consumer-group state
+
+`klag.consumer.group.state` has `consumer_group` and a lowercase `state` tag. The
+possible values are `stable`, `preparing_rebalance`, `completing_rebalance`, `empty`,
+`dead`, and `unknown`. There is no generic `rebalancing` value.
+
+The gauge value is a consecutive state-change count, **not** an encoded state or a
+lifetime cumulative total. It starts at `0`, rises while the state changes on
+back-to-back collections, and resets to `0` on an unchanged collection. Select state by
+its tag rather than comparing the gauge to a state number.
+After a transition, two-phase stale-series cleanup can leave the previous state-tagged
+series visible for one or two collection intervals.
 
 `klag.consumer.lag`, per-partition `klag.consumer.lag.ms`, and
 `klag.consumer.committed_offset` also carry `member_host`, `consumer_id`, and `client_id` tags
@@ -34,7 +49,7 @@ Reported **only when statistical outliers exist** (see [Hot Partitions](/metrics
 | Metric | Description |
 |---|---|
 | `klag.hot_partition` | Partition throughput × 100 when statistically high. Tags: `topic`, `partition` only. |
-| `klag.hot_partition.lag` | Partition lag when statistically high. |
+| `klag.hot_partition.lag` | Partition lag when statistically high. Tags: `consumer_group`, `topic`, `partition`. |
 
 ## Under-replicated partitions (ISR)
 
@@ -54,13 +69,31 @@ Partition tags: `consumer_group`, `topic`, `partition`, plus optional member lab
 | `klag.consumer.lag.ms` | Lag in milliseconds, from Kafka log timestamps (poll-history fallback). |
 | `klag.consumer.lag.time_to_close_seconds` | Estimated seconds until lag reaches zero (only when catching up). |
 
-## Data loss prevention
-
-See [Data Loss Prevention](/metrics/data-loss-prevention/). Tags: `consumer_group`, `topic`.
+## Commit staleness
 
 | Metric | Description |
 |---|---|
-| `klag.consumer.lag.retention_percent` | Lag as a percentage of the retention window (value × 100). 100% means data loss. |
+| `klag.consumer.commit.staleness_seconds` | Seconds since Klag last observed the committed-offset sum change for a lagging group and topic. Tags: `consumer_group`, `topic`. |
+
+This metric is reported only while lag is greater than zero, so an idle, caught-up
+consumer is not marked stale. Kafka does not expose a commit timestamp, so Klag observes
+the sum of committed offsets across the group/topic's partitions. Any change to that
+sum, including a rewind, resets the clock. When the group/topic catches up, Klag removes
+the baseline; if lag resumes, the next observation establishes a new baseline. Restarting
+Klag also resets observation. This is therefore an inferred signal, not the absolute age
+of the latest Kafka commit. Disable collection with `COMMIT_FRESHNESS_ENABLED=false`. See
+[Detect Stuck Consumers](/guides/detect-stuck-consumers/).
+
+## Data loss prevention
+
+See [Data Loss Prevention](/metrics/data-loss-prevention/). Topic aggregates have
+`consumer_group` and `topic` and omit `partition`; per-partition series additionally
+have `partition`. In PromQL, `{partition=""}` matches a missing label, so use it for
+topic rollups and `{partition!=""}` for partition detail.
+
+| Metric | Description |
+|---|---|
+| `klag.consumer.lag.retention_percent` | Lag as a percentage of the retention window, exported as percentage × 100 for precision. Raw `10000` represents 100% and the data-loss boundary. |
 
 ## Optional JVM metrics
 

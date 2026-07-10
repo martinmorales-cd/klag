@@ -133,8 +133,8 @@ metrics:
 app:
   # Kafka health check interval in milliseconds
   healthCheckIntervalMs: 30000
-  # Enable Java 21 virtual threads (experimental)
-  useVirtualThreads: false
+  # Enable Java 21 virtual threads (default on; set false to use event-loop model)
+  useVirtualThreads: true
 
 # MCP endpoint for AI agents (read-only; see docs). Disabled by default.
 mcp:

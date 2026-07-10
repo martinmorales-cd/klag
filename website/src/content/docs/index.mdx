@@ -37,14 +37,16 @@ head:
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-Consumer lag is the gap between what Kafka has produced and what your consumers have
-processed. Left unmonitored, growing lag means stale downstream data, memory pressure,
-and silent failures when consumer groups die. **Klag continuously monitors every
-consumer group and ships the metrics to your observability stack.**
+Consumer lag is the gap between Kafka's log-end offset and a consumer group's committed
+offset. It is a proxy for work the group has not acknowledged, not proof of completed
+business processing. Left unmonitored, growing lag means stale downstream data and
+silent failures when consumer groups die. Monitoring lag and group health is an
+essential operational practice for production Kafka; **Klag is one way to ship those
+signals to your observability stack.**
 
-:::tip[Scales to large clusters]
-Monitors thousands of consumer groups in ~50 MB heap. Request batching with configurable
-delays fetches offsets for 500+ groups without spiking broker CPU.
+:::tip[Control collection load]
+Request batching with `KAFKA_CHUNK_COUNT` and `KAFKA_CHUNK_DELAY_MS` spreads offset
+requests across a collection cycle, helping control broker load on larger clusters.
 :::
 
 ## Why Klag?
@@ -60,7 +62,7 @@ delays fetches offsets for 500+ groups without spiking broker CPU.
     Find partitions with **uneven load** causing bottlenecks, via statistical outliers.
   </Card>
   <Card title="Group state tracking" icon="approve-check">
-    Alert on **Rebalancing, Dead, or Empty** consumer-group states.
+    Alert on **`preparing_rebalance`, `completing_rebalance`, `dead`, or `empty`** states.
   </Card>
   <Card title="Data loss prevention" icon="error">
     Alert **before lag exceeds retention** and messages are lost forever.
@@ -73,11 +75,17 @@ delays fetches offsets for 500+ groups without spiking broker CPU.
 ## Get started in one command
 
 ```bash
-docker run -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+docker run -e KAFKA_BOOTSTRAP_SERVERS=broker.example.com:9092 \
            -e METRICS_REPORTER=prometheus \
            -p 8888:8888 \
            themoah/klag:latest
 ```
+
+Replace `broker.example.com:9092` with a broker address that resolves and is reachable
+from inside the Klag container. Use Docker network or service DNS for Kafka in another
+container. On Docker Desktop, `host.docker.internal:9092` reaches Kafka on the host;
+on Linux Docker, add `--add-host=host.docker.internal:host-gateway` (or use the host
+gateway IP directly).
 
 Metrics land at `http://localhost:8888/metrics`. See the [Quick Start](/getting-started/quick-start/)
 for native image, Helm, and Docker env-file options.
@@ -86,7 +94,7 @@ for native image, Helm, and Docker env-file options.
 
 <CardGrid>
   <LinkCard title="Prometheus" href="/integrations/prometheus/" description="Scrape endpoint at /metrics." />
-  <LinkCard title="Datadog" href="/integrations/datadog/" description="Direct Datadog agent submission." />
+  <LinkCard title="Datadog" href="/integrations/datadog/" description="Direct Datadog HTTP/API submission." />
   <LinkCard title="OTLP / Grafana Cloud" href="/integrations/otlp-grafana/" description="OpenTelemetry for Grafana Cloud, New Relic, and more." />
   <LinkCard title="Grafana dashboard" href="/integrations/grafana-dashboard/" description="Pre-built, comprehensive dashboard." />
 </CardGrid>

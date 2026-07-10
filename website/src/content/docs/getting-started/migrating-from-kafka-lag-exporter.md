@@ -1,32 +1,35 @@
 ---
 title: Migrating from kafka-lag-exporter
-description: Map kafka-lag-exporter metrics, labels, and configuration to Klag, including drop-in dashboard compatibility and the per-consumer member labels.
+description: Map kafka-lag-exporter metrics, labels, units, and configuration to Klag, including the dashboard and relabeling changes required during migration.
 ---
 
-[kafka-lag-exporter](https://github.com/seglo/kafka-lag-exporter) was archived in 2024. Klag is a
-maintained, drop-in-shaped replacement: it reads the same data from Kafka (offsets via the Admin
-API, `DESCRIBE`-only) and exposes the same core lag metrics, plus velocity, time-based lag, hot
-partitions, retention/data-loss alerting, and an [MCP endpoint](/ai/mcp/) for AI agents.
+[kafka-lag-exporter](https://github.com/seglo/kafka-lag-exporter) was archived in 2024.
+Klag is a maintained replacement for consumer-progress monitoring. Both read offsets
+through Kafka's Admin API, but their metric names, labels, aggregation levels, and
+time-lag units differ.
 
-This guide maps what you have today to Klag so existing dashboards and alerts keep working with
-minimal edits.
+Use the mapping below, then update Prometheus relabeling, dashboards, and alerts before
+cutting traffic over.
 
 ## Metric name mapping
 
-Klag exports through Micrometer; the Prometheus names below are what you scrape (dots become
-underscores). The logical metrics match kafka-lag-exporter one-to-one:
+Klag exports through Micrometer; the Prometheus names below are what you scrape (dots
+become underscores):
 
 | kafka-lag-exporter | Klag (Prometheus name) | Notes |
 |---|---|---|
 | `kafka_consumergroup_group_lag` | `klag_consumer_lag` | per partition |
-| `kafka_consumergroup_group_lag` (summed) | `klag_consumer_lag_sum` | per group+topic; group total: `sum by (consumer_group)(klag_consumer_lag_sum)` |
+| `kafka_consumergroup_group_topic_sum_lag` | `klag_consumer_lag_sum` | per group+topic |
+| `kafka_consumergroup_group_sum_lag` | `sum by (consumer_group)(klag_consumer_lag_sum)` | Klag derives the group total from topic rollups |
 | `kafka_consumergroup_group_max_lag` | `klag_consumer_lag_max` | per group+topic; group max: `max by (consumer_group)(klag_consumer_lag_max)` |
 | `kafka_consumergroup_group_offset` | `klag_consumer_committed_offset` | committed offset |
 | `kafka_partition_latest_offset` | `klag_partition_log_end_offset` | partition end |
 | `kafka_partition_earliest_offset` | `klag_partition_log_start_offset` | partition start |
-| `kafka_consumergroup_group_lag_seconds` | `klag_consumer_lag_ms` | **milliseconds**, divide by 1000 |
-| `kafka_consumergroup_group_max_lag_seconds` | `klag_consumer_lag_ms` (max over topics) | see [Time-Based Lag](/metrics/time-based-lag/) |
-| group state (label on lag) | `klag_consumer_group_state` | separate metric; state is a tag |
+| `kafka_consumergroup_group_lag_seconds` | `klag_consumer_lag_ms` | Klag reports milliseconds; divide by 1000 for seconds |
+| `kafka_consumergroup_group_max_lag_seconds` | `max by (consumer_group) (klag_consumer_lag_ms{partition=""}) / 1000` | Klag exposes topic-level max rollups separately from partition series |
+
+The archived exporter has no minimum-lag aggregate. Klag's
+`klag_consumer_lag_min` therefore has no source metric to map.
 
 See the full [Metrics Overview](/metrics/overview/) for everything Klag adds on top.
 
@@ -36,24 +39,28 @@ The biggest change is the group label name:
 
 | kafka-lag-exporter | Klag |
 |---|---|
+| `cluster_name` | No built-in equivalent; add a Prometheus target or external label if needed. |
 | `group` | `consumer_group` |
 | `topic` | `topic` |
 | `partition` | `partition` |
 | `member_host` | `member_host` |
 | `consumer_id` | `consumer_id` |
 | `client_id` | `client_id` |
-| `state` (on lag) | `state` (on `klag_consumer_group_state`) |
+| `is_simple_consumer` | No Klag equivalent. |
 
-The per-consumer-instance labels — `member_host`, `consumer_id`, `client_id` — are **on by
+Klag exports group state as the `state` tag on a separate
+`klag_consumer_group_state` metric.
+
+The per-consumer-instance labels `member_host`, `consumer_id`, and `client_id` are **on by
 default** in Klag and identify which consumer instance owns each partition (the same labels you used
 to trace lag to a specific pod). They ride on per-partition `klag_consumer_lag`,
 `klag_consumer_lag_ms`, and `klag_consumer_committed_offset` series. The topic-level
 `klag_consumer_lag_ms` aggregate is not member-tagged because it is a rollup across partitions.
 
-### Keep existing dashboards working
+### Relabel during the transition
 
 If your Grafana panels and alert rules reference `group=`, add a Prometheus relabel rule to alias
-`consumer_group` → `group` so they keep working unchanged:
+`consumer_group` to `group` while you update queries:
 
 ```yaml
 scrape_configs:
@@ -63,7 +70,9 @@ scrape_configs:
         target_label: group
 ```
 
-Once dashboards are updated to use `consumer_group`, drop the rule.
+This rule only aliases the label. You still need to replace metric names, adjust group
+and topic aggregations, and convert time lag from milliseconds to seconds where old
+queries expect seconds. Once dashboards use `consumer_group`, remove the rule.
 
 ## Member labels and cardinality
 
@@ -82,8 +91,11 @@ labels (they describe the partition, not a consumer), matching kafka-lag-exporte
 
 ## Configuration mapping
 
-kafka-lag-exporter is configured with a HOCON `application.conf`; Klag uses environment variables
-(or `-D` JVM properties / an external properties file — see the [Configuration Reference](/configuration/reference/)).
+kafka-lag-exporter uses a HOCON `application.conf`; Klag primarily uses environment
+variables. Any `Env`-backed setting also accepts a JVM `-D` property (env wins when both
+are set). Config precedence is classpath `application.properties`, then an external file
+at `KLAG_CONFIG_FILE`, then environment variables. See the
+[Configuration Reference](/configuration/reference/).
 
 | kafka-lag-exporter (`application.conf`) | Klag |
 |---|---|
@@ -95,15 +107,17 @@ kafka-lag-exporter is configured with a HOCON `application.conf`; Klag uses envi
 | `port` (Prometheus) | `HTTP_PORT` (scrape at `/metrics`) |
 | reporter selection | `METRICS_REPORTER=prometheus` (also `datadog`, `otlp`) |
 
-A minimal Prometheus setup:
+A minimal Prometheus setup is shown below. Replace the broker example with an address
+that resolves and is reachable from the Klag runtime:
 
 ```bash
-KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_BOOTSTRAP_SERVERS=broker.example.com:9092
 METRICS_REPORTER=prometheus
 METRICS_INTERVAL_MS=30000
 ```
 
-Klag needs only `DESCRIBE` on groups and topics — see [Kafka ACL Permissions](/kafka/acl-permissions/).
+Klag needs only `DESCRIBE` on the cluster, groups, and topics. See
+[Kafka ACL Permissions](/kafka/acl-permissions/).
 Deploy on Kubernetes with the [Helm chart](/deployment/kubernetes/).
 
 ## Time-based lag is different

@@ -1,0 +1,36 @@
+---
+globs:
+  - "src/**/metrics/**"
+  - "dashboard/**"
+  - "charts/klag/**"
+alwaysApply: false
+---
+
+# Metrics
+
+Public API — names and tags are stable contracts.
+
+## Core metrics
+
+- `klag.consumer.lag[.sum/.max/.min]` — per partition; aggregates per `consumer_group`+`topic`
+- `klag.consumer.lag.velocity` — msg/sec × 100
+- `klag.consumer.lag.ms` — time lag; per-partition + topic rollup (`{partition=""}` / `{partition!=""}`)
+- `klag.consumer.lag.time_to_close_seconds` — `consumer_group`+`topic` only
+- `klag.consumer.lag.retention_percent` — DLP; same partition rollup pattern as `lag.ms`
+- `klag.consumer.commit.staleness_seconds` — inferred commit freshness; only while lag > 0
+- `klag.consumer.group.state` — state as tag; two-phase stale-gauge cleanup on transitions
+- `klag.partition.under_replicated`, `klag.hot_partition[.lag]` — partition-level; conditional emission
+
+Member labels (`member_host`, `consumer_id`, `client_id`) on per-partition consumer metrics when `CONSUMER_MEMBER_LABELS_ENABLED=true` (default).
+
+## When adding or changing a metric
+
+Update **all** of:
+
+- Collector/reporter code + tests
+- `CLAUDE.md` and `README.md` metric sections
+- `dashboard/demo-dashboard.json` (and Grafana.com export if applicable)
+- Helm chart/README if scrape or ServiceMonitor behavior changes
+- Website docs under `website/src/content/docs/metrics/` when user-facing
+
+Never ship a new metric without a dashboard panel.

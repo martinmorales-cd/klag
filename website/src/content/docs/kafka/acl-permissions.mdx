@@ -116,3 +116,6 @@ confluent kafka acl create --allow --service-account $SERVICE_ACCOUNT \
 
   </TabItem>
 </Tabs>
+
+If Klag logs authorization failures or `/readyz` returns `503`, work through the
+[readiness and ACL checks](/guides/troubleshooting/#readyz-returns-503).

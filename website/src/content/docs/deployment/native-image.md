@@ -9,10 +9,13 @@ same config, endpoints, and metrics.
 
 ## Run the published image
 
-The native image is tagged `:native` and `:<version>-native`:
+The native image is tagged `:native` and `:<version>-native`. Replace the example
+broker address with one that resolves and is reachable from inside the container; use
+Docker network or service DNS for Kafka in another container, or
+`host.docker.internal:9092` for Kafka exposed by the host:
 
 ```bash
-docker run -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+docker run -e KAFKA_BOOTSTRAP_SERVERS=broker.example.com:9092 \
            -e METRICS_REPORTER=prometheus \
            -p 8888:8888 \
            themoah/klag:native
@@ -34,14 +37,21 @@ Benchmark startup and memory:
 scripts/benchmark-startup.sh native - build/native/nativeCompile/klag
 ```
 
-Config works like the JVM build: env vars, or JVM system properties via runtime `-D`
-flags. To run several instances on one host, give each a port:
+Configuration works like the JVM build. All settings accept environment variables, but
+only settings read through Klag's `Env` helper accept runtime `-D` properties. Those
+settings support the exact name and a dotted lowercase alias, such as
+`-DHTTP_PORT=8881` or `-Dhttp.port=8881`:
 
 ```bash
 ./build/native/nativeCompile/klag -Dhttp.port=8881
 ```
 
-See the [configuration reference](/configuration/reference/) for all keys.
+Reporter integrations, Kafka forwarding, MCP, and other environment-only settings do
+not gain `-D` support in a native build. Logging is a separate exception: Logback
+accepts exact-name properties such as `-DLOG_LEVEL=DEBUG`, but not dotted aliases such
+as `-Dlog.level`. See the
+[configuration reference](/configuration/reference/#application) for the full
+`Env`-backed list and per-setting notes.
 
 ## How it's configured
 

@@ -3,15 +3,33 @@ title: Configuration Reference
 description: Complete reference of every Klag environment variable across app, Kafka, metrics, hot partitions, time-based lag, MCP, OTLP, and logging.
 ---
 
-Klag is configured via `src/main/resources/application.properties`, an external config
-file, or environment variables. Resolution order is **classpath → external file → env
-vars** (env vars win).
+Most Klag settings are environment variables. Kafka AdminClient properties additionally
+support an optional `application.properties` file:
 
-Every environment variable below can also be set as a JVM system property — `-DNAME` or
-its dotted-lowercase form `-Dname.dotted` (e.g. `HTTP_PORT` → `-Dhttp.port=8881`). Handy
-when running the jar or [native binary](/deployment/native-image/) directly without
-exporting env vars. Resolution per key: env var → `-DNAME` → `-Dname.dotted`; env vars
-keep precedence.
+1. `application.properties` on the classpath, if you add one. Klag does **not** bundle
+   this file.
+2. An external file selected by `KLAG_CONFIG_FILE`.
+3. `KAFKA_*` environment variables (highest precedence).
+
+The properties files configure `kafka.*` keys; they are not a general configuration
+source for every setting on this page.
+
+Only settings read through Klag's `Env` helper support JVM system properties. Those keys
+resolve in this order: environment variable `NAME` → `-DNAME` → dotted
+`-Dname.dotted` (for example, `HTTP_PORT` → `-Dhttp.port=8881`). They are:
+
+- `HTTP_PORT`, `KAFKA_HEALTH_CHECK_INTERVAL_MS`
+- `KAFKA_CHUNK_COUNT`, `KAFKA_CHUNK_DELAY_MS`
+- `METRICS_INTERVAL_MS`, `CONSUMER_MEMBER_LABELS_ENABLED`,
+  `LAG_TREND_DEADBAND_MSG_PER_SEC`
+- all `HOT_PARTITION_*` and `TIME_LAG_*` settings listed below
+- `COMMIT_FRESHNESS_ENABLED`, `ISR_ENABLED`
+
+Kafka forwarding, `KLAG_CONFIG_FILE`, Vert.x, reporter integrations, and MCP read
+environment variables directly and do not use that `-D` resolution chain. Logging is a
+separate exception: Logback can resolve exact-name JVM properties such as
+`-DLOG_LEVEL=DEBUG`, but it does not provide `Env`-style dotted aliases such as
+`-Dlog.level`.
 
 ## Application
 
@@ -19,7 +37,8 @@ keep precedence.
 |---|---|---|
 | `HTTP_PORT` | `8888` | HTTP server port. |
 | `KAFKA_HEALTH_CHECK_INTERVAL_MS` | `30000` | Health-check interval. |
-| `VERTX_USE_VIRTUAL_THREADS` | `false` | Use virtual threads. |
+| `VERTX_USE_VIRTUAL_THREADS` | `true` | Use virtual threads for verticle deployment. Set `false` for the event-loop model. Environment only. |
+| `KLAG_CONFIG_FILE` | _(unset)_ | Path to an external `application.properties` file containing `kafka.*` properties. Environment only. |
 
 ## Kafka
 
@@ -30,8 +49,15 @@ keep precedence.
 | `KAFKA_CHUNK_COUNT` | `1` | Split offset requests into N batches. |
 | `KAFKA_CHUNK_DELAY_MS` | `0` | Delay (ms) between batches. |
 
-For SASL/SSL, set `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`, and
-`KAFKA_SASL_JAAS_CONFIG`. See [Installation](/getting-started/installation/).
+Any `KAFKA_X_Y_Z` environment variable is mapped to `kafka.x.y.z` and forwarded to the
+Kafka AdminClient. For example, `KAFKA_SECURITY_PROTOCOL` becomes
+`kafka.security.protocol`. This generic forwarding is environment-only; in a properties
+file, use the `kafka.*` key directly.
+
+For SASL/SSL, common settings include `KAFKA_SECURITY_PROTOCOL`,
+`KAFKA_SASL_MECHANISM`, and `KAFKA_SASL_JAAS_CONFIG`. See
+[Installation](/getting-started/installation/) and
+[ACL Permissions](/kafka/acl-permissions/).
 
 ## Metrics
 
@@ -44,9 +70,19 @@ For SASL/SSL, set `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`, and
 | `METRICS_JVM_ENABLED` | `false` | Export JVM metrics. |
 | `CONSUMER_MEMBER_LABELS_ENABLED` | `true` | Tag consumer-owned per-partition lag metrics with `member_host` / `consumer_id` / `client_id` (kafka-lag-exporter parity). Set `false` to drop them and reduce cardinality. |
 | `LAG_TREND_DEADBAND_MSG_PER_SEC` | `1.0` | STABLE band for the MCP lag-trend classifier. |
+| `COMMIT_FRESHNESS_ENABLED` | `true` | Track inferred time since a lagging group/topic's committed-offset sum last changed. |
+| `ISR_ENABLED` | `true` | Detect and report under-replicated partitions. |
 
 A group is monitored **iff** it matches any include segment **and** no exclude segment.
 See [Group Filtering](/configuration/group-filtering/).
+
+Commit freshness observes the sum of committed offsets across a group/topic's
+partitions. Any change, including a rewind, resets its clock. Caught-up periods remove
+the tracking baseline; it is established again when lag resumes. Restarting Klag also
+resets observation.
+
+See [Metrics Overview](/metrics/overview/) for commit-staleness semantics and
+[ISR Monitoring](/metrics/isr/) for the under-replicated-partition metric.
 
 ## Hot partition detection
 
@@ -77,6 +113,16 @@ See [Group Filtering](/configuration/group-filtering/).
 
 See [MCP Endpoint](/ai/mcp/) for details.
 
+## Datadog (when `METRICS_REPORTER=datadog`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `DD_API_KEY` | _(unset; required)_ | Datadog API key used for metric submission. |
+| `DD_APP_KEY` | _(unset; optional)_ | Datadog application key used for metadata operations. |
+| `DD_SITE` | `datadoghq.com` | Datadog site, such as `datadoghq.eu`. Defaults to `datadoghq.com`. |
+
+These are environment-only. See [Datadog](/integrations/datadog/).
+
 ## OTLP (when `METRICS_REPORTER=otlp`)
 
 **Standard OpenTelemetry variables:**
@@ -97,5 +143,21 @@ temporality is cumulative. See [OTLP & Grafana Cloud](/integrations/otlp-grafana
 
 ## Logging
 
-`LOG_LEVEL`, `LOG_LEVEL_KLAG`, `LOG_LEVEL_KAFKA`, `LOG_LEVEL_HEALTH`,
-`LOG_LEVEL_METRICS` set per-area log levels.
+Logging settings are interpreted directly by Logback. Set them as environment variables
+or exact-name JVM properties (for example, `-DLOG_LEVEL=DEBUG`). Dotted `Env` aliases
+such as `-Dlog.level` are not supported:
+
+| Variable | Default | Logger |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Root logger. |
+| `LOG_LEVEL_KLAG` | `LOG_LEVEL`, then `INFO` | All Klag packages. |
+| `LOG_LEVEL_KAFKA` | `INFO` | Klag's Kafka package. |
+| `LOG_LEVEL_HEALTH` | `INFO` | Klag's health package. |
+| `LOG_LEVEL_METRICS` | `INFO` | Klag's metrics package. |
+| `LOG_LEVEL_VERTX` | `WARN` | Vert.x framework (`io.vertx`). |
+| `LOG_LEVEL_KAFKA_CLIENT` | `INFO` | Apache Kafka client (`org.apache.kafka`). |
+| `LOG_LEVEL_KAFKA_LIST_OFFSETS_HANDLER` | `ERROR` | Kafka `ListOffsetsHandler`; use `WARN` or `DEBUG` when investigating list-offset requests. |
+| `LOG_LEVEL_NETTY_BOOTSTRAP` | `ERROR` | Netty `ServerBootstrap`. |
+
+The broader `io.netty` logger is fixed at `WARN`; only `ServerBootstrap` has a
+dedicated environment override.
