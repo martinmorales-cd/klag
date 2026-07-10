@@ -13,6 +13,7 @@ focused comparison for each tool.
 | Tool | Category | What it's for |
 |---|---|---|
 | **Klag** | Lag metrics exporter | Continuously export consumer lag, velocity, time-lag, retention risk, and group state to Prometheus / Datadog / OTLP. |
+| [kafka-lag-exporter](/getting-started/migrating-from-kafka-lag-exporter/) | Archived lag exporter | Former consumer-lag exporter; use the migration guide to map its names, labels, and units to Klag. |
 | [Burrow](/comparisons/klag-vs-burrow/) | Lag monitor + notifier | Evaluate lag against status rules and send email/HTTP notifications. |
 | [KMinion](/comparisons/klag-vs-kminion/) | Prometheus exporter | Export consumer-group **and** broker/topic/log-dir metrics to Prometheus. |
 | [AKHQ](/comparisons/klag-vs-akhq/) | Web UI / console | Browse topics, messages, schemas, and groups interactively. |
@@ -49,7 +50,7 @@ head-to-head comparisons are Burrow and KMinion, both dedicated lag/exporter too
 | Commit staleness (stuck-consumer signal) | ✅ | ❌ | ❌ |
 | Lag status evaluation rules | ❌ | ✅ | ❌ |
 | Built-in notifiers (email/Slack/HTTP) | ❌ | ✅ | ❌ |
-| Broker / topic / log-dir metrics | ⚠️ partial | ❌ | ✅ |
+| Broker / topic / log-dir metrics | ❌ | ❌ | ✅ |
 | Prometheus native | ✅ | ⚠️ separate exporter | ✅ |
 | Datadog / OTLP native | ✅ | ❌ | ❌ |
 | Read-only ACLs (DESCRIBE only) | ✅ | ✅ | ⚠️ writes for e2e |
@@ -62,6 +63,10 @@ Klag is a metrics exporter, so it has **no web UI**, no message/topic browser, n
 partition rebalancing, and no built-in alert-rules engine or notifiers. Those are the
 jobs of the consoles, Cruise Control, and your alerting stack respectively. Klag emits
 the raw signal and expects you to alert on it in Prometheus, Grafana, or Datadog.
+
+Klag's Kafka scope is consumer progress plus partition offsets, under-replicated
+partitions, and topic partition counts. It does not export broker health, topic
+configuration, or log-directory metrics.
 
 > Spotted something out of date? These tools all evolve. Open an issue or PR against
 > [`website/`](https://github.com/themoah/klag/tree/main/website) and we'll fix it.

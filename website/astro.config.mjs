@@ -110,6 +110,7 @@ export default defineConfig({
             { label: "Why Lag Value Alone Isn't Enough", slug: 'guides/why-lag-value-is-not-enough' },
             { label: 'Common Monitoring Mistakes', slug: 'guides/consumer-monitoring-mistakes' },
             { label: 'Detect Stuck Consumers', slug: 'guides/detect-stuck-consumers' },
+            { label: 'Troubleshooting', slug: 'guides/troubleshooting' },
           ],
         },
         {

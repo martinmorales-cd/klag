@@ -12,7 +12,9 @@ consumer-lag analysis and ships to Datadog and OTLP as well as Prometheus.
 
 - **Klag** is a consumer-lag exporter focused on lag depth: velocity, time-based lag,
   retention risk, hot partitions, and commit staleness, exported to Prometheus, Datadog,
-  or OTLP.
+  or OTLP. Its cluster-adjacent scope is limited to partition offsets,
+  under-replicated partitions, and topic partition counts; it has no broker or log-dir
+  metrics.
 - **KMinion** is a broad Prometheus exporter covering consumer-group lag plus broker,
   topic, and log-directory metrics. It also runs optional end-to-end
   produce/consume probes to measure roundtrip latency.
@@ -33,7 +35,7 @@ consumer-lag analysis and ships to Datadog and OTLP as well as Prometheus.
 |---|:---:|:---:|
 | Lag in messages | ✅ | ✅ |
 | Consumer group state | ✅ | ✅ |
-| Broker / topic / log-dir metrics | ⚠️ partial | ✅ |
+| Broker / topic / log-dir metrics | ❌ | ✅ |
 | End-to-end latency probes | ❌ | ✅ |
 | Lag velocity (growing/shrinking) | ✅ | ❌ |
 | Time-based lag (ms) + time-to-catch-up | ✅ | ❌ |

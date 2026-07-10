@@ -36,6 +36,8 @@ Pick either path:
 - **Hot Partition Detection**: count, table, and time series.
 - **Under-Replicated Partitions (ISR)**: count, table, and time series.
 - **Time-Based Lag**: max time lag, groups catching up, time-to-close charts.
+- **Commit Staleness**: time since Klag last observed each lagging group and topic
+  advance its committed offset.
 - **Data Loss Prevention**: retention-risk and at-risk topics panels.
 - **JVM panels**: memory, GC pause, threads, CPU, allocation rate, loaded classes.
 - **Template variables**: filter by consumer group and topic; auto-refresh every minute.

@@ -40,5 +40,7 @@ would actually start seeing `NotEnoughReplicasException`.
 A shrinking ISR set usually means a broker is down, overloaded, or falling behind on
 replication (disk I/O, network partition, GC pause). Check broker health for the missing
 replica(s); if `inSyncReplicaCount` reaches 0, treat it as urgent — a leader failure at that
-point loses the partition's unflushed data. Klag's [`diagnose` MCP tool](/ai/mcp/) surfaces
-this per consumer group as a WARNING (or CRITICAL when ISR count is 0).
+point loses the partition's unflushed data. Klag's [`diagnose` MCP tool](/ai/mcp/)
+surfaces under-replicated partitions on topics used by the selected consumer group as a
+WARNING (or CRITICAL when ISR count is 0). ISR itself remains a partition-level signal,
+not a consumer-group metric.
