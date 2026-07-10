@@ -42,6 +42,91 @@ per-topic plus an `overallTrend` rollup) derived from
 rolling **state-change history** (last 10 `from→to` transitions). `diagnose` uses the
 transition history to flag rebalance storms and flapping groups.
 
+## Connect from an AI client
+
+Klag speaks standard **Streamable HTTP MCP** (JSON-RPC 2.0 over POST). Any client that
+supports remote/HTTP MCP servers can connect — there's no Klag-specific SDK. You need
+one thing: the endpoint URL, `http://<host>:8888/mcp` by default (`HTTP_PORT` +
+`MCP_PATH`). If `MCP_AUTH_TOKEN` is set, add an `Authorization: Bearer <token>` header.
+Klag implements MCP protocol version `2025-11-25`.
+
+Use `https://` and a token for anything outside localhost.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http klag https://klag.example.com/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Or add it to a project `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "klag": {
+      "type": "http",
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+
+```json
+{
+  "mcpServers": {
+    "klag": {
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+### Codex
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.klag]
+url = "https://klag.example.com/mcp"
+http_headers = { Authorization = "Bearer <token>" }
+```
+
+Older Codex builds only spoke stdio and needed the `mcp-remote` bridge
+(`command = "npx"`, `args = ["mcp-remote", "https://klag.example.com/mcp"]`). Check your
+Codex version's MCP docs if the `url` form isn't recognized.
+
+### Kilo Code
+
+Open the MCP settings (`mcp_settings.json`) and add:
+
+```json
+{
+  "mcpServers": {
+    "klag": {
+      "type": "streamable-http",
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+:::note
+MCP clients evolve quickly and config field names change between versions. If a snippet
+above doesn't match your client, consult its current MCP docs — Klag only requires a
+Streamable-HTTP JSON-RPC POST endpoint, so any correct remote-MCP config will work.
+:::
+
+Once connected, ask the agent to `list_consumer_groups`, `find_lagging_groups`, or
+`diagnose` a specific group.
+
 ## Design
 
 The MCP layer reads from a `SnapshotStore` populated by the metrics collector, never

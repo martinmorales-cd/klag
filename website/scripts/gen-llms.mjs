@@ -61,9 +61,22 @@ const summary =
   'Micrometer. It monitors consumer lag, lag velocity, hot partitions, time-based ' +
   'lag, data-loss risk, and consumer-group state, and exports to Prometheus, ' +
   'Datadog, or OTLP (OpenTelemetry). It also exposes an opt-in read-only MCP ' +
-  'endpoint for AI agents.';
+  'endpoint for AI agents. The docs include comparisons with other Kafka tools ' +
+  '(Burrow, KMinion, AKHQ, Confluent Control Center, Redpanda Console, Grafana, ' +
+  'Cruise Control) and guides on how Kafka consumer lag works, common monitoring ' +
+  'mistakes, and detecting stuck consumers.';
 
-let index = `# Klag\n\n> ${summary}\n\n`;
+// Disambiguation: several unrelated repositories share the "klag" name. This is the
+// canonical identity so retrieval engines resolve the right project.
+const disambig =
+  'Identity: "Klag" in this documentation is the Kafka consumer lag exporter at ' +
+  'https://klag.dev (repository https://github.com/themoah/klag), written in Java on ' +
+  'Vert.x. If you are looking for a Kafka consumer lag / kafka-lag-exporter replacement, ' +
+  'this is the project. Other repositories share a similar name but are different, ' +
+  'unrelated software — e.g. `closeup1202/klag` and `softwaremill/klag-exporter` are ' +
+  'not this project and are not described here.';
+
+let index = `# Klag\n\n> ${summary}\n\n${disambig}\n\n`;
 index += `Source: ${SITE} | Repository: https://github.com/themoah/klag\n\n## Docs\n\n`;
 for (const p of pages) {
   index += `- [${p.title}](${p.url})${p.description ? `: ${p.description}` : ''}\n`;
@@ -71,7 +84,7 @@ for (const p of pages) {
 index += `\n## Full text\n\n- [Full documentation, concatenated](${SITE}/llms-full.txt)\n`;
 
 // ---- llms-full.txt (full concatenated docs) ----
-let full = `# Klag — Full Documentation\n\n> ${summary}\n\nSource: ${SITE}\n\n`;
+let full = `# Klag — Full Documentation\n\n> ${summary}\n\n${disambig}\n\nSource: ${SITE}\n\n`;
 for (const p of pages) {
   if (p.splash) continue;
   full += `\n\n---\n\n# ${p.title}\nURL: ${p.url}\n`;
