@@ -45,8 +45,8 @@ essential operational practice for production Kafka; **Klag is one way to ship t
 signals to your observability stack.**
 
 :::tip[Control collection load]
-Request batching with configurable delays spreads offset requests across a collection
-cycle, helping control broker load on larger clusters.
+Request batching with `KAFKA_CHUNK_COUNT` and `KAFKA_CHUNK_DELAY_MS` spreads offset
+requests across a collection cycle, helping control broker load on larger clusters.
 :::
 
 ## Why Klag?
@@ -83,7 +83,9 @@ docker run -e KAFKA_BOOTSTRAP_SERVERS=broker.example.com:9092 \
 
 Replace `broker.example.com:9092` with a broker address that resolves and is reachable
 from inside the Klag container. Use Docker network or service DNS for Kafka in another
-container, or `host.docker.internal:9092` for Kafka exposed by the host.
+container. On Docker Desktop, `host.docker.internal:9092` reaches Kafka on the host;
+on Linux Docker, add `--add-host=host.docker.internal:host-gateway` (or use the host
+gateway IP directly).
 
 Metrics land at `http://localhost:8888/metrics`. See the [Quick Start](/getting-started/quick-start/)
 for native image, Helm, and Docker env-file options.

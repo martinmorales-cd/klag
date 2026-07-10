@@ -92,8 +92,10 @@ labels (they describe the partition, not a consumer), matching kafka-lag-exporte
 ## Configuration mapping
 
 kafka-lag-exporter uses a HOCON `application.conf`; Klag primarily uses environment
-variables. A subset supports `-D` properties, while external properties files configure
-Kafka client keys only. See the [Configuration Reference](/configuration/reference/).
+variables. Any `Env`-backed setting also accepts a JVM `-D` property (env wins when both
+are set). Config precedence is classpath `application.properties`, then an external file
+at `KLAG_CONFIG_FILE`, then environment variables. See the
+[Configuration Reference](/configuration/reference/).
 
 | kafka-lag-exporter (`application.conf`) | Klag |
 |---|---|

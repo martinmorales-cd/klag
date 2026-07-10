@@ -46,6 +46,7 @@ export default defineConfig({
     '/migration': '/getting-started/migrating-from-kafka-lag-exporter/',
     '/getting-started/comparison': '/comparisons/overview/',
     '/comparisons': '/comparisons/overview/',
+    '/comparisons/': '/comparisons/overview/',
   },
 
   integrations: [

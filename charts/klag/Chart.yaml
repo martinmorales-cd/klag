@@ -2,8 +2,8 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.4
-appVersion: "0.2.7"
+version: 0.3.5
+appVersion: "0.2.9"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
 sources:
@@ -32,11 +32,15 @@ annotations:
       url: https://github.com/themoah/klag/blob/main/README.md
   artifacthub.io/images: |
     - name: klag
-      image: themoah/klag:0.2.7
+      image: themoah/klag:0.2.9
   artifacthub.io/maintainers: |
     - name: themoah
       email: aviv@dozorets.com
   artifacthub.io/changes: |
+    - kind: changed
+      description: Enable Java 21 virtual threads by default (app.useVirtualThreads=true); set false for event-loop deployment
+    - kind: fixed
+      description: Keep JVM alive when virtual threads are enabled (KlagLauncher blocks until shutdown)
     - kind: added
       description: Per-partition breakdown of klag.consumer.lag.ms and klag.consumer.lag.retention_percent (topic-level aggregate kept as the partition-less series; select it with {partition=""}, drill down with {partition!=""})
     - kind: changed
