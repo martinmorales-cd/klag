@@ -19,12 +19,12 @@ and so on. Offsets are per-partition, not per-topic. Two things move along this 
 
 Consumer lag for one partition is simply:
 
-```
+```text
 lag = log-end offset − committed offset
 ```
 
-If producers have written up to offset 1,000 and the group has committed offset 950, the
-group is **50 messages behind** on that partition.
+If the log-end offset is 1,000 (producers have written through offset 999) and the group
+has committed offset 950, the group is **50 messages behind** on that partition.
 
 ## Lag is per-partition, then aggregated
 

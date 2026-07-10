@@ -26,7 +26,7 @@ with any Kafka-compatible cluster, not just Redpanda — and so does Klag.
 | Message browsing | ❌ | ✅ |
 | Time-series lag & alerting | ✅ | ❌ (point-in-time view) |
 | Runtime | Java / Vert.x / GraalVM | Go |
-| License | Apache 2.0 | Open source |
+| License | Apache 2.0 | BSL (enterprise features separately licensed) |
 
 ## Feature comparison
 

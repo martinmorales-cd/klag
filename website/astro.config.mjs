@@ -44,7 +44,7 @@ export default defineConfig({
   // Short links for the README and external references.
   redirects: {
     '/migration': '/getting-started/migrating-from-kafka-lag-exporter/',
-    '/getting-started/comparison': '/comparisons/',
+    '/getting-started/comparison': '/comparisons/overview/',
     '/comparisons': '/comparisons/overview/',
   },
 

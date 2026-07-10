@@ -52,6 +52,13 @@ Klag implements MCP protocol version `2025-11-25`.
 
 Use `https://` and a token for anything outside localhost.
 
+:::caution
+The snippets below use `Bearer <token>` placeholders. Project-level files like `.mcp.json`
+and `.cursor/mcp.json` are often committed to source control — don't put a real token
+there. Prefer an untracked global config (`~/.cursor/mcp.json`), your client's
+environment-variable/secret interpolation, or a git-ignored file.
+:::
+
 ### Claude Code
 
 ```bash
