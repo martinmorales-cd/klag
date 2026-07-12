@@ -30,9 +30,6 @@ annotations:
       url: https://github.com/themoah/klag/issues
     - name: documentation
       url: https://github.com/themoah/klag/blob/main/README.md
-  artifacthub.io/images: |
-    - name: klag
-      image: themoah/klag:0.2.9
   artifacthub.io/maintainers: |
     - name: themoah
       email: aviv@dozorets.com
