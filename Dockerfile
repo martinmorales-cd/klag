@@ -28,8 +28,8 @@ COPY src src
 # Build fat JAR
 RUN gradle assemble --no-daemon
 
-# Runtime stage
-FROM eclipse-temurin:21-jre
+# Runtime stage (Ubuntu 24.04 Noble to avoid pebble + reduce CVEs)
+FROM eclipse-temurin:21-jre-noble
 
 WORKDIR /app
 
