@@ -9,13 +9,13 @@ plugins {
 }
 
 group = "io.github.themoah"
-version = "0.2.9"
+version = "0.2.10"
 
 repositories {
   mavenCentral()
 }
 
-val vertxVersion = "4.5.22"
+val vertxVersion = "4.5.30"
 val junitJupiterVersion = "5.9.1"
 val micrometerVersion = "1.12.0"
 
@@ -35,7 +35,7 @@ dependencies {
   implementation("io.vertx:vertx-kafka-client")
   implementation("io.vertx:vertx-web")
   implementation("org.slf4j:slf4j-api:2.0.9")
-  implementation("ch.qos.logback:logback-classic:1.4.14")
+  implementation("ch.qos.logback:logback-classic:1.5.38")
 
   // Micrometer registries
   implementation("io.micrometer:micrometer-registry-datadog:$micrometerVersion")
