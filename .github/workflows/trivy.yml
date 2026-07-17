@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Trivy FS scan (repo)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -31,7 +33,9 @@ jobs:
           output: 'trivy-fs.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
+      # Fork PRs lack security-events: write; skip upload so the scan still runs.
       - name: Upload SARIF
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-fs.sarif

@@ -15,9 +15,8 @@ RUN apt-get update && \
     ln -s "/opt/gradle/gradle-${GRADLE_VERSION}/bin/gradle" /usr/bin/gradle && \
     rm -f /tmp/gradle.zip
 
-# Copy build files
-COPY build.gradle.kts .
-COPY settings.gradle.kts .
+# Copy build files (lockfile required — STRICT locking on compile/runtime classpaths)
+COPY build.gradle.kts settings.gradle.kts gradle.lockfile ./
 
 # Download dependencies (cached layer)
 RUN gradle dependencies --no-daemon

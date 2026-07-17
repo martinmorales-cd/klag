@@ -56,6 +56,14 @@ dependencies {
   implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
   implementation("io.micrometer:micrometer-registry-otlp:$micrometerVersion")
 
+  // Force patched protobuf (transitive via micrometer-registry-otlp → opentelemetry-proto).
+  // CVE-2024-7254 / GHSA-735f-pc8j-v9w8 — StackOverflow on nested groups.
+  constraints {
+    implementation("com.google.protobuf:protobuf-java:3.25.5") {
+      because("CVE-2024-7254")
+    }
+  }
+
   testImplementation("io.vertx:vertx-junit5")
   testImplementation("org.junit.jupiter:junit-jupiter:$junitJupiterVersion")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
