@@ -17,8 +17,9 @@ RUN microdnf install -y unzip findutils zlib-static && \
     ln -s "/opt/gradle/gradle-${GRADLE_VERSION}/bin/gradle" /usr/bin/gradle && \
     rm -f /tmp/gradle.zip
 
-# Cache dependencies (fail fast on resolution/config errors)
-COPY build.gradle.kts settings.gradle.kts ./
+# Cache dependencies (fail fast on resolution/config errors).
+# Lockfile required — STRICT locking on compile/runtime classpaths.
+COPY build.gradle.kts settings.gradle.kts gradle.lockfile ./
 RUN gradle dependencies --no-daemon
 
 # Build the native binary (mostly-static: only libc dynamic -> runs on distroless/base)
