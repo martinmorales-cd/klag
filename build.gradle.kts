@@ -15,6 +15,20 @@ repositories {
   mavenCentral()
 }
 
+// Lock resolved versions so CI/Trivy can scan Java deps (Trivy reads *gradle.lockfile).
+// Only production classpaths — test configs stay unlocked to cut lockfile churn.
+dependencyLocking {
+  lockMode.set(LockMode.STRICT)
+}
+configurations {
+  compileClasspath {
+    resolutionStrategy.activateDependencyLocking()
+  }
+  runtimeClasspath {
+    resolutionStrategy.activateDependencyLocking()
+  }
+}
+
 val vertxVersion = "4.5.30"
 val junitJupiterVersion = "5.9.1"
 val micrometerVersion = "1.12.0"
