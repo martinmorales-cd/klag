@@ -1,7 +1,19 @@
-# Klag [![license-badge][]][license]
+# Klag
 
-[license]:             https://github.com/themoah/klag/blob/main/LICENSE
-[license-badge]:       https://img.shields.io/badge/License-Apache%202.0-blue.svg
+[![License][license-badge]][license] [![Release][release-badge]][release] [![CI][ci-badge]][ci]
+
+[![Docker Pulls][docker-badge]][docker] [![Artifact Hub][artifacthub-badge]][artifacthub] [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/themoah/klag)
+
+[license]: https://github.com/themoah/klag/blob/main/LICENSE
+[license-badge]: https://img.shields.io/badge/License-Apache%202.0-blue.svg
+[release]: https://github.com/themoah/klag/releases/latest
+[release-badge]: https://img.shields.io/github/v/release/themoah/klag?logo=github
+[ci]: https://github.com/themoah/klag/actions/workflows/build-and-push.yml
+[ci-badge]: https://github.com/themoah/klag/actions/workflows/build-and-push.yml/badge.svg
+[docker]: https://hub.docker.com/r/themoah/klag
+[docker-badge]: https://img.shields.io/docker/pulls/themoah/klag?logo=docker
+[artifacthub]: https://artifacthub.io/packages/helm/klag/klag
+[artifacthub-badge]: https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/klag
 
 **Kafka Consumer Lag Exporter** — Know when your consumers fall behind, before it becomes a problem.
 
