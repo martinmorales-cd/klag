@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.themoah"
-version = "0.2.10"
+version = "0.2.11"
 
 repositories {
   mavenCentral()
@@ -56,11 +56,15 @@ dependencies {
   implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
   implementation("io.micrometer:micrometer-registry-otlp:$micrometerVersion")
 
-  // Force patched protobuf (transitive via micrometer-registry-otlp → opentelemetry-proto).
-  // CVE-2024-7254 / GHSA-735f-pc8j-v9w8 — StackOverflow on nested groups.
+  // Force patched transitive versions.
   constraints {
+    // micrometer-registry-otlp → opentelemetry-proto — StackOverflow on nested groups.
     implementation("com.google.protobuf:protobuf-java:3.25.5") {
       because("CVE-2024-7254")
+    }
+    // kafka-clients — JNI XXHash JVM crash on invalid byte-array ranges.
+    implementation("at.yawk.lz4:lz4-java:1.11.1") {
+      because("CVE-2026-59949")
     }
   }
 

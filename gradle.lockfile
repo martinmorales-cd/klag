@@ -1,7 +1,7 @@
 # This is a Gradle generated file for dependency locking.
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
-at.yawk.lz4:lz4-java:1.10.1=runtimeClasspath
+at.yawk.lz4:lz4-java:1.11.1=runtimeClasspath
 ch.qos.logback:logback-classic:1.5.38=compileClasspath,runtimeClasspath
 ch.qos.logback:logback-core:1.5.38=compileClasspath,runtimeClasspath
 com.fasterxml.jackson.core:jackson-core:2.21.5=compileClasspath,runtimeClasspath

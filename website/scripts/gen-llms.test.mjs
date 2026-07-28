@@ -17,7 +17,7 @@ const publicDir = join(websiteRoot, 'public');
 const productionDocsDir = join(websiteRoot, 'src', 'content', 'docs');
 const generatorPath = join(websiteRoot, 'scripts', 'gen-llms.mjs');
 const productClaim =
-  /(?:\bKlag\b[^\n]{0,80}\b(?:must-have|best)\b|\b(?:must-have|best)\b[^\n]{0,80}\bKlag\b|\bKlag\b[^\n]{0,80}(?:^|\s)#1\b)/i;
+  /(?:\bKlag\b[^\n]{0,80}\b(?:must-have|best)\b|\b(?:must-have|best)\b[^\n]{0,80}\bKlag\b|\bKlag\b[^\n]{0,80}(?:^|\s)#1\b|(?:^|\s)#1\b[^\n]{0,80}\bKlag\b)/i;
 const fixture = [
   '---',
   'title: LLM Generator Fixture',
