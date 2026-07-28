@@ -10,6 +10,14 @@ import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import matter from 'gray-matter';
+import yaml from 'js-yaml';
+
+// gray-matter still declares js-yaml ^3; use a js-yaml 4 engine so we can force
+// a single patched copy (4.3.0+) via npm overrides without calling removed safeLoad.
+const yamlEngine = {
+  parse: (str) => yaml.load(str) ?? {},
+  stringify: (obj) => yaml.dump(obj),
+};
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_DOCS = join(ROOT, 'src', 'content', 'docs');
@@ -335,7 +343,7 @@ export async function generateLlms({
   const pages = [];
   for (const file of files) {
     const raw = await readFile(file, 'utf8');
-    const { data, content } = matter(raw);
+    const { data, content } = matter(raw, { engines: { yaml: yamlEngine } });
     const urlPath = toUrlPath(file, docsDir);
     // Skip the splash landing page from the doc body dump but keep it in the index.
     pages.push({

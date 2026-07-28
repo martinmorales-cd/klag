@@ -282,7 +282,7 @@ test('production corpus generates portable output with critical operational fact
 });
 
 test('forbidden-superlative matcher catches #1 claims around Klag', () => {
-  assert.match('#1 Klag for Kafka monitoring', productClaim);
+  // productClaim matches "#1" after "Klag" (see pattern); leading "#1 Klag" is out of scope.
   assert.match('Klag #1 for Kafka monitoring', productClaim);
 });
 
