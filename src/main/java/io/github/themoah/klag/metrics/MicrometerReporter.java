@@ -473,8 +473,8 @@ public class MicrometerReporter {
     long deleteStartNanos = System.nanoTime();
     for (String key : toDelete) {
       removeGauge(key);
-      markedForDeletion.remove(key);
     }
+    markedForDeletion.removeAll(toDelete);
 
     if (!toDelete.isEmpty()) {
       long deleteMs = (System.nanoTime() - deleteStartNanos) / 1_000_000L;
