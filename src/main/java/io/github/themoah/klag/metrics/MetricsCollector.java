@@ -235,6 +235,7 @@ public class MetricsCollector {
     log.debug("Collecting lag metrics");
     collectionInFlight = true;
     cycleTopicOffsets.clear();
+    long cycleStartNanos = System.nanoTime();
 
     return kafkaClient.listConsumerGroups()
       .compose(groups -> {
@@ -261,7 +262,11 @@ public class MetricsCollector {
         return collectAllGroupsParallel(filteredGroups);
       })
       .onFailure(err -> log.error("Failed to collect lag metrics", err))
-      .onComplete(ar -> collectionInFlight = false);
+      .onComplete(ar -> {
+        collectionInFlight = false;
+        long cycleMs = (System.nanoTime() - cycleStartNanos) / 1_000_000L;
+        log.info("Collection cycle finished in {}ms (success={})", cycleMs, ar.succeeded());
+      });
   }
 
   /**

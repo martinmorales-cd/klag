@@ -38,9 +38,16 @@ public class MicrometerReporter {
 
   private final MeterRegistry registry;
   private final boolean memberLabelsEnabled;
-  private final Map<String, AtomicLong> gaugeValues = new ConcurrentHashMap<>();
+  /** Gauge value + registered meter, keyed by {@code name + tags.toString()}. */
+  private final Map<String, HeldGauge> gauges = new ConcurrentHashMap<>();
   private final Set<String> markedForDeletion = ConcurrentHashMap.newKeySet();
   private final ConsumerGroupStateTracker stateTracker = new ConsumerGroupStateTracker();
+
+  /**
+   * Holds the mutable gauge value together with the Micrometer {@link Meter} so stale cleanup
+   * can remove from the registry in O(1) without scanning {@code registry.getMeters()}.
+   */
+  private record HeldGauge(AtomicLong value, Meter meter) {}
 
   public MicrometerReporter(MeterRegistry registry) {
     this(registry, true);
@@ -431,16 +438,21 @@ public class MicrometerReporter {
     return Future.succeededFuture();
   }
 
+  /**
+   * Registers or updates a gauge. The map key is {@code name + tags.toString()} — use
+   * {@link Tags#toString()} (no spaces after commas), not {@code Meter.Id#getTags()} list
+   * formatting, so keys stay stable across report and cleanup.
+   */
   private String recordGauge(String name, Tags tags, long value) {
     String key = name + tags.toString();
-    AtomicLong atomicValue = gaugeValues.computeIfAbsent(key, k -> {
+    HeldGauge held = gauges.computeIfAbsent(key, k -> {
       AtomicLong newValue = new AtomicLong(value);
-      Gauge.builder(name, newValue, AtomicLong::get)
+      Meter meter = Gauge.builder(name, newValue, AtomicLong::get)
         .tags(tags)
         .register(registry);
-      return newValue;
+      return new HeldGauge(newValue, meter);
     });
-    atomicValue.set(value);
+    held.value().set(value);
     return key;
   }
 
@@ -452,19 +464,21 @@ public class MicrometerReporter {
    * @param activeKeys set of gauge keys that were updated in the current cycle
    */
   public void cleanupStaleGauges(Set<String> activeKeys) {
-    Set<String> currentKeys = gaugeValues.keySet();
+    Set<String> currentKeys = gauges.keySet();
 
     // Phase 2: Delete gauges marked for deletion that are still missing
     Set<String> toDelete = new HashSet<>(markedForDeletion);
     toDelete.removeAll(activeKeys);
 
+    long deleteStartNanos = System.nanoTime();
     for (String key : toDelete) {
       removeGauge(key);
       markedForDeletion.remove(key);
     }
 
     if (!toDelete.isEmpty()) {
-      log.info("Cleaned up {} stale gauges", toDelete.size());
+      long deleteMs = (System.nanoTime() - deleteStartNanos) / 1_000_000L;
+      log.info("Cleaned up {} stale gauges in {}ms", toDelete.size(), deleteMs);
     }
 
     // Phase 1: Mark currently missing gauges for deletion
@@ -484,21 +498,10 @@ public class MicrometerReporter {
   }
 
   private void removeGauge(String key) {
-    AtomicLong value = gaugeValues.remove(key);
-    if (value != null) {
-      registry.getMeters().stream()
-        .filter(meter -> buildMeterKey(meter).equals(key))
-        .findFirst()
-        .ifPresent(registry::remove);
+    HeldGauge held = gauges.remove(key);
+    if (held != null) {
+      registry.remove(held.meter());
       log.debug("Removed stale gauge: {}", key);
     }
-  }
-
-  // Must match recordGauge's key exactly. Meter.Id#getTags() returns a List<Tag> whose
-  // toString() puts a space after each comma ("[tag(a=b), tag(c=d)]"), whereas Tags#toString()
-  // does not ("[tag(a=b),tag(c=d)]"). Wrapping in Tags.of() reproduces the recordGauge format,
-  // otherwise stale meters are dropped from gaugeValues but never removed from the registry.
-  private String buildMeterKey(Meter meter) {
-    return meter.getId().getName() + Tags.of(meter.getId().getTags()).toString();
   }
 }
