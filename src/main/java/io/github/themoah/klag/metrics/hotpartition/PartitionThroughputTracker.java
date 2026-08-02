@@ -47,39 +47,22 @@ public class PartitionThroughputTracker {
   }
 
   /**
-   * Calculates current throughput rates for all partitions that have enough data.
+   * Calculates current throughput rates for all partitions that have enough data,
+   * grouped by topic.
    *
-   * @return map of "topic:partition" key to throughput (messages/second)
+   * <p>Topic and partition come from the retained history, never from parsing the map key:
+   * topic names may legally contain the key separator.
+   *
+   * @return map of topic to (partition number to throughput in messages/second)
    */
-  public Map<String, Double> calculateAllThroughputs() {
-    Map<String, Double> result = new HashMap<>();
+  public Map<String, Map<Integer, Double>> calculateThroughputsByTopic() {
+    Map<String, Map<Integer, Double>> result = new HashMap<>();
 
-    for (Map.Entry<String, PartitionThroughputHistory> entry : histories.entrySet()) {
-      Double throughput = entry.getValue().calculateThroughput();
+    for (PartitionThroughputHistory history : histories.values()) {
+      Double throughput = history.calculateThroughput();
       if (throughput != null && throughput >= 0) {
-        result.put(entry.getKey(), throughput);
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Gets all throughput rates for a specific topic.
-   *
-   * @param topic the topic name
-   * @return map of partition number to throughput (only partitions with sufficient data)
-   */
-  public Map<Integer, Double> getThroughputsForTopic(String topic) {
-    Map<Integer, Double> result = new HashMap<>();
-
-    for (Map.Entry<String, PartitionThroughputHistory> entry : histories.entrySet()) {
-      PartitionThroughputHistory history = entry.getValue();
-      if (history.topic().equals(topic)) {
-        Double throughput = history.calculateThroughput();
-        if (throughput != null && throughput >= 0) {
-          result.put(history.partition(), throughput);
-        }
+        result.computeIfAbsent(history.topic(), k -> new HashMap<>())
+          .put(history.partition(), throughput);
       }
     }
 
@@ -102,6 +85,9 @@ public class PartitionThroughputTracker {
 
   /**
    * Creates a key for the partition history map.
+   *
+   * <p>The key is opaque: it is only ever compared, never parsed back into topic and
+   * partition (topic names may contain ':'). Read topic/partition off the history instead.
    *
    * @param topic the topic name
    * @param partition the partition number

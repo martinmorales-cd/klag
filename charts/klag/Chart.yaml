@@ -2,8 +2,8 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.7
-appVersion: "0.2.12"
+version: 0.3.8
+appVersion: "0.2.13"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
 sources:
@@ -48,3 +48,9 @@ annotations:
       description: Per-consumer-instance member labels (member_host, consumer_id, client_id) on consumer-owned lag metrics for kafka-lag-exporter parity; opt out with CONSUMER_MEMBER_LABELS_ENABLED=false
     - kind: fixed
       description: Stale gauges are now actually removed from the registry (key-format mismatch left old series lingering on /metrics)
+    - kind: fixed
+      description: Klag no longer exits (and crash-loops) when Kafka is unreachable during the first metrics collection; the first cycle now degrades like the health monitor
+    - kind: fixed
+      description: Topic names containing ':' no longer break every collection cycle (hot-partition throughput detection parsed the topic out of its internal key)
+    - kind: fixed
+      description: A cycle that observes no consumer groups now runs the full cycle-end cleanup and refreshes the MCP snapshot instead of leaving stale tracker history and a frozen snapshot

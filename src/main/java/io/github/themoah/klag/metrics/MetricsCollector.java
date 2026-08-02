@@ -203,8 +203,11 @@ public class MetricsCollector {
     log.info("Starting metrics collector with interval: {}ms, filter: {}, exclude: {}",
       intervalMs, groupFilter.includeDescription(), groupFilter.excludeDescription());
 
+    // The first cycle is recovered: a broker that is down at boot must degrade (like
+    // KafkaHealthMonitor) instead of failing verticle startup, which exits the process
+    // and crash-loops under Kubernetes. collectAndReport already logs the cause.
     return reporter.start()
-      .compose(v -> collectAndReport())
+      .compose(v -> collectAndReport().recover(err -> Future.succeededFuture()))
       .onComplete(ar -> {
         timerId = vertx.setPeriodic(intervalMs, id -> {
           if (collectionInFlight) {
@@ -247,11 +250,10 @@ public class MetricsCollector {
           groups.size(), filteredGroups.size());
 
         if (filteredGroups.isEmpty()) {
-          reporter.cleanupStaleGauges(Set.of());
-          reporter.cleanupStateTracker(Set.of());
-          if (commitFreshnessTracker != null) {
-            commitFreshnessTracker.cleanupStale(Set.of());
-          }
+          // Same cycle-end path as a normal cycle, with empty key sets: every tracker
+          // drains and the MCP snapshot refreshes to empty instead of staying frozen
+          // at the last non-empty cycle.
+          finishCycle(new CycleState(newCycleSnapshot()));
           return Future.succeededFuture();
         }
 
@@ -449,8 +451,6 @@ public class MetricsCollector {
             for (PartitionOffsets po : chunkResult) {
               TopicPartitionKey key = new TopicPartitionKey(po.topic(), po.partition());
               topicOffsets.put(key, po);
-              // Update cached topic partition counts
-              cachedTopicPartitionCounts.merge(po.topic(), 1, Integer::max);
             }
           }
 
