@@ -162,7 +162,7 @@ Set `KLAG_CONFIG_FILE` to the path of an external `application.properties` (typi
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `app.healthCheckIntervalMs` | Kafka health check interval (ms) | `30000` |
-| `app.useVirtualThreads` | Enable Java 21 virtual threads | `false` |
+| `app.useVirtualThreads` | Enable Java 21 virtual threads | `true` |
 
 ### MCP Configuration (AI agent endpoint)
 

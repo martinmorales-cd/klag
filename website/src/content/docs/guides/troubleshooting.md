@@ -23,6 +23,11 @@ defaults `metrics.reporter` to `prometheus`. See
 no group remains after filtering. The collector starts one cycle immediately; velocity
 and some derived metrics still need more samples.
 
+If Kafka is unreachable at startup, Klag **stays running (degraded)** instead of
+exiting — `/readyz` returns `503` until connectivity is restored and a cycle succeeds.
+This is intentional: the process tolerates a broker outage at boot like the health
+monitor, so a transient Kafka blip does not crash-loop the pod.
+
 **Fix:** Check the logs for a completed collection or Kafka errors. Verify
 `KAFKA_BOOTSTRAP_SERVERS`, the [required ACLs](/kafka/acl-permissions/), and the
 [group filters](/configuration/group-filtering/). Wait for a successful cycle. If the
@@ -80,8 +85,11 @@ handle the added polling load. See [Lag Velocity](/metrics/lag-velocity/) and
 
 - `401`: `MCP_AUTH_TOKEN` is set and the Bearer token is missing or wrong.
 - `405`: The client sent `GET`; Klag accepts JSON-RPC 2.0 over `POST`.
-- Snapshot not ready: metrics collection is disabled, the first cycle has not
-  succeeded, or filters leave no groups to collect.
+- Snapshot not ready: metrics collection is disabled or the first cycle has not
+  succeeded, so no snapshot exists yet.
+- Snapshot empty (`groupCount: 0`): reports ran, but the group filters left no
+  groups to collect. Each cycle publishes a refreshed empty snapshot rather than
+  returning stale data from an earlier run.
 
 **Fix:** Send `Authorization: Bearer <token>`, use a Streamable HTTP MCP client that
 posts JSON-RPC requests, and select a reporter with `METRICS_REPORTER`. Then resolve

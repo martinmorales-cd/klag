@@ -5,9 +5,11 @@ import io.github.themoah.klag.model.ConsumerGroupState;
 import io.github.themoah.klag.model.PartitionInfo;
 import io.github.themoah.klag.model.PartitionOffsets;
 import io.vertx.core.Future;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Service interface for Kafka administrative operations.
@@ -37,6 +39,36 @@ public interface KafkaClientService {
    * @return Future containing list of partition offsets
    */
   Future<List<PartitionOffsets>> getLogEndOffsets(String topic);
+
+  /**
+   * Gets the log end offsets for all partitions of every given topic.
+   *
+   * <p>The real client overrides this with a single batched round-trip (one describeTopics
+   * plus three listOffsets for the whole set), which is what keeps admin request volume
+   * independent of topic count. This default fans out per topic so that alternative
+   * implementations — notably test fakes — stay correct without reimplementing anything.
+   *
+   * @param topics the topic names
+   * @return Future containing partition offsets grouped by topic; topics with no metadata
+   *     are absent from the map
+   */
+  default Future<Map<String, List<PartitionOffsets>>> getLogEndOffsets(Set<String> topics) {
+    if (topics == null || topics.isEmpty()) {
+      return Future.succeededFuture(Map.of());
+    }
+    List<String> ordered = List.copyOf(topics);
+    List<Future<List<PartitionOffsets>>> futures = ordered.stream()
+      .map(this::getLogEndOffsets)
+      .collect(Collectors.toList());
+
+    return Future.all(futures).map(composite -> {
+      Map<String, List<PartitionOffsets>> byTopic = new HashMap<>();
+      for (int i = 0; i < composite.size(); i++) {
+        byTopic.put(ordered.get(i), composite.resultAt(i));
+      }
+      return byTopic;
+    });
+  }
 
   /**
    * Gets the committed offsets for a consumer group.

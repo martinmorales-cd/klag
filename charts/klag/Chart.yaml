@@ -2,8 +2,8 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.8
-appVersion: "0.2.13"
+version: 0.3.9
+appVersion: "0.2.14"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
 sources:
@@ -34,6 +34,12 @@ annotations:
     - name: themoah
       email: aviv@dozorets.com
   artifacthub.io/changes: |
+    - kind: changed
+      description: Batch topic offset lookups into one describeTopics + three listOffsets per cycle instead of four admin requests per topic, cutting broker load and cycle time on clusters with many topics
+    - kind: added
+      description: KAFKA_MAX_CONCURRENT_GROUPS (default 50) bounds how many consumer-group offset requests are in flight at once
+    - kind: fixed
+      description: Leaderless (offline) partitions no longer throw while reading topic metadata, which previously dropped the whole topic from a collection cycle
     - kind: changed
       description: Enable Java 21 virtual threads by default (app.useVirtualThreads=true); set false for event-loop deployment
     - kind: fixed
