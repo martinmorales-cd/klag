@@ -35,7 +35,7 @@ annotations:
       email: aviv@dozorets.com
   artifacthub.io/changes: |
     - kind: changed
-      description: Batch topic offset lookups into one describeTopics + three listOffsets per cycle instead of four admin requests per topic, cutting broker load and cycle time on clusters with many topics
+      description: Batch topic offset lookups into one describeTopics + three listOffsets per cycle (per chunk when KAFKA_CHUNK_COUNT > 1) instead of four admin requests per topic, cutting broker load and cycle time on clusters with many topics
     - kind: added
       description: KAFKA_MAX_CONCURRENT_GROUPS (default 50) bounds how many consumer-group offset requests are in flight at once
     - kind: fixed

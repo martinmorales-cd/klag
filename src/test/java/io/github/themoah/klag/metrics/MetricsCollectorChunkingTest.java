@@ -49,6 +49,7 @@ class MetricsCollectorChunkingTest {
     final Map<String, Integer> topicPartitions;
     volatile Map<String, State> states = new HashMap<>();
     volatile Set<String> failingGroups = Set.of();
+    volatile Set<String> failingOffsetGroups = Set.of();
 
     ChunkedFakeKafka(Map<String, String> groupToTopic, Map<String, Integer> topicPartitions) {
       this.groupToTopic = groupToTopic;
@@ -68,6 +69,9 @@ class MetricsCollectorChunkingTest {
     }
 
     @Override public Future<ConsumerGroupOffsets> getConsumerGroupOffsets(String groupId) {
+      if (failingOffsetGroups.contains(groupId)) {
+        return Future.failedFuture("injected listConsumerGroupOffsets failure for " + groupId);
+      }
       String topic = groupToTopic.get(groupId);
       Map<TopicPartitionKey, Long> offsets = new HashMap<>();
       for (int p = 0; p < topicPartitions.get(topic); p++) {
@@ -199,6 +203,41 @@ class MetricsCollectorChunkingTest {
           .tag("consumer_group", "group-a").gauge();
         assertNotNull(lagSumA, "group-a gauges must not be deleted on partial cycles");
         assertEquals(100.0, lagSumA.value(), "group-a keeps its last good value (cycle 1)");
+        ctx.completeNow();
+      })));
+  }
+
+  @Test
+  void skippedGroupOffsetsDoNotDeleteThatGroupsGauges(Vertx vertx, VertxTestContext ctx) {
+    // Non-chunked path: one group's listConsumerGroupOffsets fails (coordinator hiccup,
+    // ACL gap, group deleted mid-cycle). It is skipped, so its keys are absent from the
+    // cycle accumulators — the retainAll cleanups must not run against that partial set.
+    ChunkedFakeKafka kafka = new ChunkedFakeKafka(TWO_GROUPS,
+      Map.of("topic-a", 1, "topic-b", 1));
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    MetricsCollector collector = new MetricsCollector(vertx, kafka,
+      new MicrometerReporter(registry), 60_000, "*", "",
+      new LagVelocityTracker(),
+      new HotPartitionConfig(false, 2.0, 3, 3, 20),
+      new TimeLagConfig(true, 100, 60, 180_000),
+      new ChunkConfig(1, 0));
+
+    collector.collectOnce()
+      .compose(v -> {
+        kafka.failingOffsetGroups = Set.of("group-a");
+        return collector.collectOnce(); // cycle 2: group-a's offsets fail
+      })
+      .compose(v -> collector.collectOnce()) // cycle 3: still failing
+      .onComplete(ctx.succeeding(v -> ctx.verify(() -> {
+        Gauge lagSumA = registry.find("klag.consumer.lag.sum")
+          .tag("consumer_group", "group-a").gauge();
+        assertNotNull(lagSumA, "group-a gauges must not be deleted when its offsets fetch fails");
+        assertEquals(50.0, lagSumA.value(), "group-a keeps its last good value (cycle 1)");
+
+        Gauge lagSumB = registry.find("klag.consumer.lag.sum")
+          .tag("consumer_group", "group-b").gauge();
+        assertNotNull(lagSumB, "group-b lag gauge must exist");
+        assertEquals(150.0, lagSumB.value(), "group-b must still be collected");
         ctx.completeNow();
       })));
   }

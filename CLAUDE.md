@@ -62,7 +62,9 @@ src/main/java/io/github/themoah/klag/
 **Collection cycle (keep this shape).** Each cycle runs in two phases: committed offsets for
 every group (in waves of `KAFKA_MAX_CONCURRENT_GROUPS`), then **one** batched
 `getLogEndOffsets(Set<String>)` for the union of their topics — one `describeTopics` plus
-three `listOffsets` for the whole set, not per topic. Lag assembly is then pure computation.
+three `listOffsets` for the whole set, not per topic (with `KAFKA_CHUNK_COUNT > 1` the union
+is split into that many batches, so it is one such batched call *per chunk*, still not per
+topic). Lag assembly is then pure computation.
 Admin request volume must stay independent of topic count; reintroducing a per-topic fetch
 regresses it to 4 requests × every topic × every cycle.
 `MetricsCollectorBatchingTest` pins this.

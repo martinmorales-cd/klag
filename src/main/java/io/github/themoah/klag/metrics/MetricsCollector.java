@@ -284,11 +284,11 @@ public class MetricsCollector {
    * Original non-chunked path: collects all groups in parallel.
    */
   private Future<Void> collectAllGroupsParallel(Set<String> filteredGroups) {
-    Future<List<ConsumerGroupLag>> lagFuture = collectGroupLags(filteredGroups);
+    CycleState cycle = new CycleState(newCycleSnapshot());
+    Future<List<ConsumerGroupLag>> lagFuture = collectGroupLags(filteredGroups, cycle);
     Future<Map<String, ConsumerGroupState>> stateFuture =
         kafkaClient.describeConsumerGroups(filteredGroups);
 
-    CycleState cycle = new CycleState(newCycleSnapshot());
     return Future.all(lagFuture, stateFuture)
       .map(composite -> {
         List<ConsumerGroupLag> lagData = composite.resultAt(0);
@@ -331,7 +331,7 @@ public class MetricsCollector {
   private Future<Void> processGroupChunk(List<String> chunk, CycleState cycle) {
     log.debug("Processing group chunk with {} groups", chunk.size());
 
-    Future<List<ConsumerGroupLag>> lagFuture = collectGroupLags(chunk);
+    Future<List<ConsumerGroupLag>> lagFuture = collectGroupLags(chunk, cycle);
     Future<Map<String, ConsumerGroupState>> stateFuture =
         kafkaClient.describeConsumerGroups(new HashSet<>(chunk));
 
@@ -364,13 +364,13 @@ public class MetricsCollector {
    * retainAll against the keys observed in the whole cycle: running any of them with a
    * chunk-local subset wipes the accumulated state of every other chunk.
    *
-   * <p>Partial cycles (a chunk failed) skip cleanup and publish entirely: the failed
-   * chunk's keys are missing from the accumulators, and cleaning up against an incomplete
+   * <p>Partial cycles (a chunk or a single group failed) skip cleanup and publish entirely:
+   * the failed keys are missing from the accumulators, and cleaning up against an incomplete
    * key set would mark or delete live series. Stale values beat deleted series.
    */
   private void finishCycle(CycleState cycle) {
     if (cycle.partial) {
-      log.warn("Collection cycle was partial (at least one chunk failed); "
+      log.warn("Collection cycle was partial (at least one chunk or group failed); "
         + "keeping previous metrics and skipping stale cleanup until a full cycle succeeds");
       return;
     }
@@ -400,8 +400,9 @@ public class MetricsCollector {
    *
    * <p>Phase 3 is pure assembly — no I/O — because every group's topics are already resolved.
    */
-  private Future<List<ConsumerGroupLag>> collectGroupLags(Collection<String> groups) {
-    return fetchGroupOffsets(groups)
+  private Future<List<ConsumerGroupLag>> collectGroupLags(
+      Collection<String> groups, CycleState cycle) {
+    return fetchGroupOffsets(groups, cycle)
       .compose(offsetsByGroup -> {
         Set<String> topics = offsetsByGroup.values().stream()
           .flatMap(offsets -> offsets.offsets().keySet().stream())
@@ -575,7 +576,8 @@ public class MetricsCollector {
    *
    * @return group ID to its committed offsets; groups that failed are absent
    */
-  private Future<Map<String, ConsumerGroupOffsets>> fetchGroupOffsets(Collection<String> groups) {
+  private Future<Map<String, ConsumerGroupOffsets>> fetchGroupOffsets(
+      Collection<String> groups, CycleState cycle) {
     Map<String, ConsumerGroupOffsets> byGroup = new HashMap<>();
 
     return ChunkProcessor.<String, Void>processSequentially(
@@ -584,9 +586,12 @@ public class MetricsCollector {
         List<Future<ConsumerGroupOffsets>> futures = wave.stream()
           // Recover to null so one failing group (deleted mid-cycle, coordinator hiccup,
           // ACL gap) is skipped rather than failing the wave and aborting the cycle for
-          // every other group.
+          // every other group. The cycle is marked partial: a skipped group's keys are
+          // absent from the accumulators, so the retainAll cleanups in finishCycle would
+          // delete its live series instead of holding the last good values.
           .map(groupId -> kafkaClient.getConsumerGroupOffsets(groupId)
             .recover(err -> {
+              cycle.partial = true;
               log.warn("Failed to collect lag for group {} (skipped this cycle): {}",
                 groupId, err.getMessage());
               return Future.succeededFuture(null);
