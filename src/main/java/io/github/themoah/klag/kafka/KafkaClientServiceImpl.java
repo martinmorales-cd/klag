@@ -395,8 +395,11 @@ public class KafkaClientServiceImpl implements KafkaClientService {
       .map(descriptions -> {
         Map<String, ConsumerGroupState> result = new HashMap<>();
         descriptions.forEach((groupId, description) -> {
+          // Pass the name, not the enum: kafka-clients 4.x deprecated ConsumerGroupState
+          // for removal, but the Vert.x wrapper still returns it. See State#fromKafkaState.
+          var kafkaState = description.getState();
           ConsumerGroupState.State state = ConsumerGroupState.State
-              .fromKafkaState(description.getState());
+              .fromKafkaState(kafkaState == null ? null : kafkaState.name());
           result.put(groupId, new ConsumerGroupState(groupId, state, partitionOwners(description)));
           log.debug("Consumer group {} state: {}", groupId, state);
         });

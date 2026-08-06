@@ -40,23 +40,27 @@ public record ConsumerGroupState(
     EMPTY;
 
     /**
-     * Converts from Kafka's ConsumerGroupState to this enum.
+     * Converts a Kafka group-state enum constant name to this enum.
      *
-     * @param kafkaState the Kafka consumer group state
-     * @return the corresponding State enum value
+     * <p>Takes the name rather than {@code org.apache.kafka.common.ConsumerGroupState} on
+     * purpose: that class is deprecated for removal in kafka-clients 4.x (superseded by
+     * {@code GroupState}), but the Vert.x admin wrapper still returns it. Matching on the
+     * name keeps klag off the removal path — when Vert.x switches to {@code GroupState},
+     * whose constants carry the same names, this needs no change. Names klag does not know
+     * (the new consumer protocol's {@code ASSIGNING}/{@code RECONCILING}) map to UNKNOWN.
+     *
+     * @param kafkaStateName the Kafka group state's enum constant name, may be null
+     * @return the corresponding State enum value, or UNKNOWN if unrecognised
      */
-    public static State fromKafkaState(org.apache.kafka.common.ConsumerGroupState kafkaState) {
-      if (kafkaState == null) {
+    public static State fromKafkaState(String kafkaStateName) {
+      if (kafkaStateName == null) {
         return UNKNOWN;
       }
-      return switch (kafkaState) {
-        case PREPARING_REBALANCE -> PREPARING_REBALANCE;
-        case COMPLETING_REBALANCE -> COMPLETING_REBALANCE;
-        case STABLE -> STABLE;
-        case DEAD -> DEAD;
-        case EMPTY -> EMPTY;
-        default -> UNKNOWN;
-      };
+      try {
+        return valueOf(kafkaStateName);
+      } catch (IllegalArgumentException e) {
+        return UNKNOWN;
+      }
     }
 
     /**
