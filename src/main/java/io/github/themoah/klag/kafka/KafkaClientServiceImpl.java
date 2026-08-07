@@ -103,9 +103,11 @@ public class KafkaClientServiceImpl implements KafkaClientService {
   /**
    * Describes every given topic in a single {@code describeTopics} round-trip.
    *
-   * <p>Topics absent from the response (deleted mid-cycle, not authorized) are simply missing
-   * from the returned map rather than failing the batch — one bad topic must not blind the
-   * whole collection cycle.
+   * <p>Note the Vert.x wrapper resolves this through {@code DescribeTopicsResult.allTopicNames()},
+   * so an unknown or unauthorized topic fails the whole batch before this mapping runs — callers
+   * must filter deleted topics out beforehand (MetricsCollector does, against listTopics). The
+   * null-description skip below only covers a broker returning a short map for a topic it did
+   * accept; it is deliberately tolerant so one odd topic cannot blind the whole cycle.
    */
   private Future<Map<String, List<PartitionInfo>>> describePartitions(Set<String> topics) {
     log.debug("Describing partitions for {} topics", topics.size());
@@ -159,7 +161,11 @@ public class KafkaClientServiceImpl implements KafkaClientService {
     return describePartitions(topics)
       .compose(partitionsByTopic -> {
         if (partitionsByTopic.isEmpty()) {
-          return Future.succeededFuture(Map.<String, List<PartitionOffsets>>of());
+          // Topics were requested and none came back with metadata: that is blindness, not
+          // "no topics". Succeeding empty here would make the cycle look complete and let
+          // stale-gauge cleanup delete every series in the cluster.
+          return Future.<Map<String, List<PartitionOffsets>>>failedFuture(new IllegalStateException(
+            "No topic metadata returned for any of the " + topics.size() + " requested topics"));
         }
 
         // Use MAX_TIMESTAMP to get the offset with highest timestamp (Kafka 3.0+)

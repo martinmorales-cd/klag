@@ -618,9 +618,19 @@
                         "index": 4,
                         "text": "Completing Rebalance"
                       },
+                      "assigning": {
+                        "color": "yellow",
+                        "index": 5,
+                        "text": "Assigning"
+                      },
+                      "reconciling": {
+                        "color": "yellow",
+                        "index": 6,
+                        "text": "Reconciling"
+                      },
                       "unknown": {
                         "color": "orange",
-                        "index": 5,
+                        "index": 7,
                         "text": "Unknown"
                       }
                     },

@@ -103,7 +103,7 @@ and [charts/klag/README.md](charts/klag/README.md).
 | `klag.consumer.lag.ms` | Lag in ms from Kafka log timestamps                            |
 | `klag.consumer.lag.time_to_close_seconds` | Estimated seconds until lag reaches zero    |
 | `klag.consumer.lag.retention_percent` | Lag as % of available messages (data loss alerting) |
-| `klag.consumer.group.state` | Group health: Stable, Rebalancing, Dead, Empty           |
+| `klag.consumer.group.state` | Group health: stable, preparing/completing_rebalance (assigning/reconciling on KIP-848 groups), dead, empty |
 | `klag.hot_partition[.lag]` | Partitions with statistically abnormal throughput         |
 | `klag.partition.under_replicated` | Partitions with fewer in-sync replicas than configured (ISR gap) |
 

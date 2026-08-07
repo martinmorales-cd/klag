@@ -25,8 +25,16 @@ Broker/topic signals such as throughput and ISR do not have a `consumer_group` t
 ### Consumer-group state
 
 `klag.consumer.group.state` has `consumer_group` and a lowercase `state` tag. The
-possible values are `stable`, `preparing_rebalance`, `completing_rebalance`, `empty`,
-`dead`, and `unknown`. There is no generic `rebalancing` value.
+possible values are `stable`, `preparing_rebalance`, `completing_rebalance`, `assigning`,
+`reconciling`, `empty`, `dead`, and `unknown`. There is no generic `rebalancing` value.
+
+Groups on the KIP-848 consumer protocol (Kafka 4.0+) report `assigning` and `reconciling`
+in place of `preparing_rebalance` and `completing_rebalance`. Alerts that name only the
+classic pair go silent on upgraded groups — match all four:
+
+```promql
+klag_consumer_group_state{state=~"preparing_rebalance|completing_rebalance|assigning|reconciling"}
+```
 
 The gauge value is a consecutive state-change count, **not** an encoded state or a
 lifetime cumulative total. It starts at `0`, rises while the state changes on

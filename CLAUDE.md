@@ -69,6 +69,21 @@ Admin request volume must stay independent of topic count; reintroducing a per-t
 regresses it to 4 requests × every topic × every cycle.
 `MetricsCollectorBatchingTest` pins this.
 
+**Deleted topics are filtered before describeTopics.** The Vert.x wrapper resolves
+`describeTopics` via `allTopicNames()`, so one unknown topic fails the whole batch — and
+committed offsets outlive a deleted topic until `offsets.retention.minutes` (7d), which would
+keep every cycle partial and stale-gauge cleanup frozen that long. The union is intersected
+with one cached `listTopics()` per cycle; absent topics are treated as deleted (series retired
+in 1–2 cycles). Cost: asymmetric ACLs (offsets readable, topic not) look like deletion.
+A failed `listTopics` must propagate, never fall through unfiltered.
+
+**Partial cycles skip cleanup but still publish the MCP snapshot.** A permanently failing
+group (ACL gap, wedged coordinator) freezes stale-gauge cleanup indefinitely — deliberate
+(cleaning against an incomplete key set deletes live series), documented in troubleshooting,
+fixed by ACL or `METRICS_GROUP_EXCLUDE`. The snapshot is exempt so agents don't read
+hours-old data while `/metrics` stays current; an *empty* snapshot is not published, since
+wiping the agent view is worse than a stale one.
+
 ## HTTP Endpoints
 
 | Endpoint | Purpose |

@@ -68,6 +68,52 @@ METRICS_GROUP_EXCLUDE=
 Then add patterns back one at a time. Excludes run after includes. See
 [Group Filtering](/configuration/group-filtering/).
 
+## Old series never disappear from `/metrics`
+
+**Likely cause:** Stale-gauge cleanup only runs after a **complete** collection cycle. If
+one group fails every cycle — a missing group `DESCRIBE` ACL, a wedged coordinator — the
+cycle is permanently partial and cleanup never runs, so series for deleted groups, topics,
+and rotated consumer members linger indefinitely. The log carries
+`Failed to collect lag for group <id> (skipped this cycle)` and
+`Collection cycle was partial` every interval, naming the group.
+
+This is deliberate: cleaning up against an incomplete key set would delete live series.
+Stale values beat deleted ones — but the freeze lasts as long as the failure does.
+
+**Fix:** Grant the group the [required ACLs](/kafka/acl-permissions/), or drop it with
+`METRICS_GROUP_EXCLUDE`. Cleanup resumes on the next complete cycle. The MCP snapshot is
+unaffected: it keeps publishing the groups that did succeed.
+
+## A deleted topic's series stay, or a live topic's series disappear
+
+Klag filters each cycle's topic set against the cluster's topic list before requesting
+metadata, because the Kafka admin call fails as a whole if any topic in the batch is
+unknown — and a group's committed offsets outlive a deleted topic until
+`offsets.retention.minutes` (7 days by default). Without the filter, one deleted topic
+would keep every cycle partial, and cleanup frozen, for that long.
+
+The cost is an ACL asymmetry: `listTopics` only returns topics the principal can see. If
+Klag can read a group's committed offsets for a topic it cannot describe, that topic looks
+deleted and its series are retired within 1–2 cycles. The log records
+`Skipping N topic(s) absent from the cluster topic list`.
+
+**Fix:** Grant topic `DESCRIBE` matching the group access you granted — see
+[ACL Permissions](/kafka/acl-permissions/). Asymmetric grants are the only case where a
+live topic goes missing this way.
+
+## Collection cycles overrun the interval on large clusters
+
+**Likely cause:** Each cycle issues one batched `listOffsets` per request type covering
+every partition in scope. The Kafka AdminClient splits that per leader broker, and the
+timestamp lookups it performs scale with **partitions per broker**, so a cluster with few
+brokers and many partitions can approach `KAFKA_REQUEST_TIMEOUT_MS` (default 30000). The
+log shows `Skipping collection tick: previous cycle still running`.
+
+**Fix:** Set `KAFKA_CHUNK_COUNT` above 1. Chunking splits the work into partition-weighted
+batches processed sequentially, with `KAFKA_CHUNK_DELAY_MS` between them. Raising
+`METRICS_INTERVAL_MS` or `KAFKA_REQUEST_TIMEOUT_MS` also helps. See the
+[Configuration Reference](/configuration/reference/#kafka).
+
 ## Velocity or time-lag metrics are missing at first
 
 **Likely cause:** Lag velocity needs three collection samples. The time-lag fallback

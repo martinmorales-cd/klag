@@ -2,8 +2,8 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.9
-appVersion: "0.2.14"
+version: 0.3.8
+appVersion: "0.2.13"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
 sources:
@@ -34,6 +34,12 @@ annotations:
     - name: themoah
       email: aviv@dozorets.com
   artifacthub.io/changes: |
+    - kind: fixed
+      description: A topic deleted while a group still has committed offsets for it no longer keeps every cycle partial (which froze stale-series cleanup for up to offsets.retention.minutes); such topics are filtered out and their series retired
+    - kind: fixed
+      description: The MCP snapshot now refreshes on a partial cycle instead of freezing at the last complete one, so one failing consumer group no longer leaves AI agents reading stale data while /metrics stays current
+    - kind: added
+      description: KIP-848 consumer-protocol group states (assigning, reconciling) are reported as their own state tag values instead of collapsing to unknown; rebalance alerts should match all four rebalance states
     - kind: changed
       description: Batch topic offset lookups into one describeTopics + three listOffsets per cycle (per chunk when KAFKA_CHUNK_COUNT > 1) instead of four admin requests per topic, cutting broker load and cycle time on clusters with many topics
     - kind: added

@@ -46,6 +46,8 @@ class MetricsCollectorBatchingTest {
     private final Map<String, List<String>> groupTopics;
     final List<Set<String>> batchCalls = new ArrayList<>();
     int perTopicCalls;
+    // Topics a group still has committed offsets for, but that no longer exist in the cluster.
+    Set<String> deletedTopics = Set.of();
 
     CountingKafka(Map<String, List<String>> groupTopics) {
       this.groupTopics = groupTopics;
@@ -85,7 +87,14 @@ class MetricsCollectorBatchingTest {
         Collectors.toMap(id -> id, id -> new ConsumerGroupState(id, State.STABLE))));
     }
 
-    @Override public Future<Set<String>> listTopics() { return Future.succeededFuture(Set.of()); }
+    // The collector filters the topic union against this before describing topics, so it has
+    // to report the topics the groups actually consume.
+    @Override public Future<Set<String>> listTopics() {
+      Set<String> live = groupTopics.values().stream().flatMap(List::stream)
+        .filter(topic -> !deletedTopics.contains(topic))
+        .collect(Collectors.toSet());
+      return Future.succeededFuture(live);
+    }
     @Override public Future<List<PartitionInfo>> listPartitions(String topic) { return Future.succeededFuture(List.of()); }
     @Override public Future<String> describeCluster() { return Future.succeededFuture("cluster"); }
     @Override public Future<Map<String, Long>> getTopicRetentionMs(Set<String> topics) { return Future.succeededFuture(Map.of()); }
@@ -139,6 +148,24 @@ class MetricsCollectorBatchingTest {
         List<String> fetched = kafka.batchCalls.stream().flatMap(Set::stream).toList();
         assertEquals(10, fetched.size(), "every topic fetched exactly once per cycle");
         assertEquals(10, Set.copyOf(fetched).size());
+        ctx.completeNow();
+      })));
+  }
+
+  @Test
+  @DisplayName("a deleted topic is filtered out instead of failing the whole batch")
+  void deletedTopicIsFilteredOut(Vertx vertx, VertxTestContext ctx) {
+    CountingKafka kafka = new CountingKafka(manyGroups());
+    // Committed offsets outlive a deleted topic until offsets.retention.minutes, so groups
+    // still report it. Without filtering, describeTopics (allTopicNames) fails the whole
+    // batch every cycle and stale-gauge cleanup stays frozen for as long as that lasts.
+    kafka.deletedTopics = Set.of("topic-3");
+
+    collector(vertx, kafka, new ChunkConfig(1, 0)).collectOnce().onComplete(ctx.succeeding(v ->
+      ctx.verify(() -> {
+        assertEquals(1, kafka.batchCalls.size());
+        assertEquals(9, kafka.batchCalls.get(0).size(), "deleted topic must not be described");
+        assertTrue(!kafka.batchCalls.get(0).contains("topic-3"));
         ctx.completeNow();
       })));
   }

@@ -83,6 +83,11 @@ public class MetricsCollector {
   private final Map<String, Future<List<PartitionOffsets>>> cycleTopicOffsets =
       new ConcurrentHashMap<>();
 
+  // Per-cycle cache of the cluster's topic names, used to drop deleted topics before
+  // describeTopics sees them. One list call per cycle, not per chunk. Cleared with
+  // cycleTopicOffsets; a failed lookup stays cached so the cycle fails once, not per chunk.
+  private Future<Set<String>> cycleTopicNames;
+
   // Guards against overlapping collection cycles when a cycle exceeds the interval
   // (large clusters, chunk delays). Only touched on the Vert.x event loop.
   private boolean collectionInFlight;
@@ -247,6 +252,7 @@ public class MetricsCollector {
     log.debug("Collecting lag metrics");
     collectionInFlight = true;
     cycleTopicOffsets.clear();
+    cycleTopicNames = null;
     long cycleStartNanos = System.nanoTime();
 
     return kafkaClient.listConsumerGroups()
@@ -364,14 +370,23 @@ public class MetricsCollector {
    * retainAll against the keys observed in the whole cycle: running any of them with a
    * chunk-local subset wipes the accumulated state of every other chunk.
    *
-   * <p>Partial cycles (a chunk or a single group failed) skip cleanup and publish entirely:
-   * the failed keys are missing from the accumulators, and cleaning up against an incomplete
-   * key set would mark or delete live series. Stale values beat deleted series.
+   * <p>Partial cycles (a chunk or a single group failed) skip cleanup: the failed keys are
+   * missing from the accumulators, and cleaning up against an incomplete key set would mark
+   * or delete live series. Stale values beat deleted series. Note this means a permanently
+   * failing group (ACL gap, wedged coordinator) freezes cleanup indefinitely — the WARN below
+   * names the group; fix its ACL or exclude it via METRICS_GROUP_EXCLUDE.
+   *
+   * <p>The MCP snapshot still publishes on a partial cycle, because freezing it would leave
+   * agents reading hours-old data while /metrics stays current. The exception is an empty
+   * snapshot: nothing was collected at all, and wiping the agent view is worse than a stale one.
    */
   private void finishCycle(CycleState cycle) {
     if (cycle.partial) {
       log.warn("Collection cycle was partial (at least one chunk or group failed); "
         + "keeping previous metrics and skipping stale cleanup until a full cycle succeeds");
+      if (cycle.snapshot != null && !cycle.snapshot.groups.isEmpty()) {
+        publishSnapshot(cycle.snapshot);
+      }
       return;
     }
     velocityTracker.cleanupStaleTopics(cycle.velocityKeys);
@@ -622,6 +637,14 @@ public class MetricsCollector {
    * yielding empty lag: {@link #finishCycle} is then skipped and existing gauges are kept.
    * Stale values beat deleting live series over a transient broker error.
    *
+   * <p>Topics are first filtered against the cluster's topic list. The Vert.x admin wrapper
+   * resolves describeTopics through {@code allTopicNames()}, so a single unknown topic fails
+   * the whole batch — and a group's committed offsets outlive a deleted topic until
+   * {@code offsets.retention.minutes} (7 days by default), which would keep every cycle
+   * partial, and therefore stale-gauge cleanup frozen, for that long. Dropping the topic here
+   * makes deletion look like deletion: its series go missing from the cycle's key set and are
+   * retired within 1-2 cycles.
+   *
    * @return flattened topic-partition to offsets lookup for lag assembly
    */
   private Future<Map<TopicPartitionKey, PartitionOffsets>> fetchTopicOffsets(Set<String> topics) {
@@ -642,24 +665,49 @@ public class MetricsCollector {
       return Future.succeededFuture(merged);
     }
 
-    List<List<String>> topicChunks = chunkConfig.isChunkingEnabled()
-      ? ChunkProcessor.balanceIntoChunks(missing, chunkConfig.chunkCount(),
-          topic -> cachedTopicPartitionCounts.getOrDefault(topic, 1))
-      : List.of(new ArrayList<>(missing));
+    // A failed listTopics propagates: filtering must never silently fall through unfiltered,
+    // which is what reintroduces the week-long cleanup freeze.
+    return clusterTopics().compose(existing -> {
+      Set<String> gone = new HashSet<>(missing);
+      gone.removeAll(existing);
+      if (!gone.isEmpty()) {
+        // Also covers topics the principal cannot see: with asymmetric ACLs (group offsets
+        // readable, topic not) klag cannot tell that apart from deletion and retires the series.
+        log.info("Skipping {} topic(s) absent from the cluster topic list (deleted or not "
+          + "visible to this principal); their series are retired: {}", gone.size(), gone);
+        missing.removeAll(gone);
+      }
+      if (missing.isEmpty()) {
+        return Future.succeededFuture(merged);
+      }
 
-    return ChunkProcessor.<String, Void>processSequentially(
-      vertx, topicChunks, chunkConfig.chunkDelayMs(),
-      chunk -> kafkaClient.getLogEndOffsets(new HashSet<>(chunk)).<Void>map(byTopic -> {
-        byTopic.forEach((topic, partitions) -> {
-          // Publish as a completed future: the ISR check reads cycleTopicOffsets and treats
-          // an absent or failed entry as "metadata unavailable, skip this topic".
-          cycleTopicOffsets.put(topic, Future.succeededFuture(partitions));
-          cachedTopicPartitionCounts.put(topic, partitions.size());
-          index(merged, partitions);
-        });
-        return null;
-      })
-    ).map(v -> merged);
+      List<List<String>> topicChunks = chunkConfig.isChunkingEnabled()
+        ? ChunkProcessor.balanceIntoChunks(missing, chunkConfig.chunkCount(),
+            topic -> cachedTopicPartitionCounts.getOrDefault(topic, 1))
+        : List.of(new ArrayList<>(missing));
+
+      return ChunkProcessor.<String, Void>processSequentially(
+        vertx, topicChunks, chunkConfig.chunkDelayMs(),
+        chunk -> kafkaClient.getLogEndOffsets(new HashSet<>(chunk)).<Void>map(byTopic -> {
+          byTopic.forEach((topic, partitions) -> {
+            // Publish as a completed future: the ISR check reads cycleTopicOffsets and treats
+            // an absent or failed entry as "metadata unavailable, skip this topic".
+            cycleTopicOffsets.put(topic, Future.succeededFuture(partitions));
+            cachedTopicPartitionCounts.put(topic, partitions.size());
+            index(merged, partitions);
+          });
+          return null;
+        })
+      ).map(v -> merged);
+    });
+  }
+
+  /** Cluster topic names, fetched at most once per cycle and shared by every chunk. */
+  private Future<Set<String>> clusterTopics() {
+    if (cycleTopicNames == null) {
+      cycleTopicNames = kafkaClient.listTopics();
+    }
+    return cycleTopicNames;
   }
 
   private static void index(
@@ -938,7 +986,8 @@ public class MetricsCollector {
    *
    * <p>Each set gathers the keys observed across all chunks so the retainAll-based
    * cleanups in {@link #finishCycle(CycleState)} see the complete cycle. {@code partial}
-   * is set when a chunk fails, which suppresses cleanup and snapshot publish for the cycle.
+   * is set when a chunk fails, which suppresses cleanup for the cycle (the snapshot still
+   * publishes unless it is empty).
    */
   private static class CycleState {
     final Set<String> activeKeys = new HashSet<>();

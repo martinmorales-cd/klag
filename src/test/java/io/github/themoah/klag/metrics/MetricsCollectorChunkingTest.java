@@ -101,7 +101,10 @@ class MetricsCollectorChunkingTest {
       return Future.succeededFuture(result);
     }
 
-    @Override public Future<Set<String>> listTopics() { return Future.succeededFuture(Set.of()); }
+    // The collector filters the topic union against this before describing topics.
+    @Override public Future<Set<String>> listTopics() {
+      return Future.succeededFuture(Set.copyOf(topicPartitions.keySet()));
+    }
     @Override public Future<List<PartitionInfo>> listPartitions(String topic) { return Future.succeededFuture(List.of()); }
     @Override public Future<String> describeCluster() { return Future.succeededFuture("cluster"); }
     @Override public Future<Map<String, Long>> getTopicRetentionMs(Set<String> topics) { return Future.succeededFuture(Map.of()); }

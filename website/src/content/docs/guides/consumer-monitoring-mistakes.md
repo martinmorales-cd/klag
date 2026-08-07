@@ -32,9 +32,11 @@ A group can go `empty` (all consumers gone) or thrash through
 watch lag, a group that reaches `dead` can stay quiet until the backlog is huge.
 
 **Instead:** select `klag_consumer_group_state` by its lowercase `state` tag. The real
-values are `stable`, `preparing_rebalance`, `completing_rebalance`, `empty`, `dead`, and
-`unknown`; there is no generic `rebalancing` state. The gauge value is a state-change
-count, not an encoded state number.
+values are `stable`, `preparing_rebalance`, `completing_rebalance`, `assigning`,
+`reconciling`, `empty`, `dead`, and `unknown`; there is no generic `rebalancing` state.
+Groups on the KIP-848 consumer protocol report `assigning`/`reconciling` instead of the
+classic rebalance pair, so rebalance alerts must match all four. The gauge value is a
+state-change count, not an encoded state number.
 
 For example, detect an empty or dead group by label presence:
 

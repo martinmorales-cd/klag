@@ -35,6 +35,11 @@ public record ConsumerGroupState(
     UNKNOWN,
     PREPARING_REBALANCE,
     COMPLETING_REBALANCE,
+    // KIP-848 (new consumer protocol) replaces the two rebalance states above with these.
+    // Kept as distinct tags rather than aliased onto the classic ones: separate values match
+    // what Kafka reports and keep alert semantics honest.
+    ASSIGNING,
+    RECONCILING,
     STABLE,
     DEAD,
     EMPTY;
@@ -47,7 +52,7 @@ public record ConsumerGroupState(
      * {@code GroupState}), but the Vert.x admin wrapper still returns it. Matching on the
      * name keeps klag off the removal path — when Vert.x switches to {@code GroupState},
      * whose constants carry the same names, this needs no change. Names klag does not know
-     * (the new consumer protocol's {@code ASSIGNING}/{@code RECONCILING}) map to UNKNOWN.
+     * map to UNKNOWN.
      *
      * @param kafkaStateName the Kafka group state's enum constant name, may be null
      * @return the corresponding State enum value, or UNKNOWN if unrecognised
