@@ -893,7 +893,7 @@ public class MetricsCollector {
       log.debug("Skipped {} partitions with no lag_ms estimate", skippedPartitions);
     }
     if (!lagMsList.isEmpty()) {
-      log.info("Calculated lag_ms for {} consumer-group/topic pairs", lagMsList.size());
+      log.debug("Calculated lag_ms for {} consumer-group/topic pairs", lagMsList.size());
     }
 
     return lagMsList;
