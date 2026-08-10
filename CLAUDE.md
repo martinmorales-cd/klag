@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Klag is a Kafka Lag Exporter built with Vert.x 4.5.22. Monitors consumer lag and group states with Prometheus/Datadog/OTLP metrics.
+Klag is a Kafka Lag Exporter built with Vert.x 4.5.30. Monitors consumer lag and group states with Prometheus/Datadog/OTLP metrics.
 
 ## Build Commands
 
@@ -59,6 +59,31 @@ src/main/java/io/github/themoah/klag/
 └── model/                     # Records: ConsumerGroupLag, ConsumerGroupState, PartitionOffsets, LagVelocity, etc.
 ```
 
+**Collection cycle (keep this shape).** Each cycle runs in two phases: committed offsets for
+every group (in waves of `KAFKA_MAX_CONCURRENT_GROUPS`), then **one** batched
+`getLogEndOffsets(Set<String>)` for the union of their topics — one `describeTopics` plus
+three `listOffsets` for the whole set, not per topic (with `KAFKA_CHUNK_COUNT > 1` the union
+is split into that many batches, so it is one such batched call *per chunk*, still not per
+topic). Lag assembly is then pure computation.
+Admin request volume must stay independent of topic count; reintroducing a per-topic fetch
+regresses it to 4 requests × every topic × every cycle.
+`MetricsCollectorBatchingTest` pins this.
+
+**Deleted topics are filtered before describeTopics.** The Vert.x wrapper resolves
+`describeTopics` via `allTopicNames()`, so one unknown topic fails the whole batch — and
+committed offsets outlive a deleted topic until `offsets.retention.minutes` (7d), which would
+keep every cycle partial and stale-gauge cleanup frozen that long. The union is intersected
+with one cached `listTopics()` per cycle; absent topics are treated as deleted (series retired
+in 1–2 cycles). Cost: asymmetric ACLs (offsets readable, topic not) look like deletion.
+A failed `listTopics` must propagate, never fall through unfiltered.
+
+**Partial cycles skip cleanup but still publish the MCP snapshot.** A permanently failing
+group (ACL gap, wedged coordinator) freezes stale-gauge cleanup indefinitely — deliberate
+(cleaning against an incomplete key set deletes live series), documented in troubleshooting,
+fixed by ACL or `METRICS_GROUP_EXCLUDE`. The snapshot is exempt so agents don't read
+hours-old data while `/metrics` stays current; an *empty* snapshot is not published, since
+wiping the agent view is worse than a stale one.
+
 ## HTTP Endpoints
 
 | Endpoint | Purpose |
@@ -75,7 +100,7 @@ src/main/java/io/github/themoah/klag/
 
 Any `Env`-backed variable resolves in order (first non-blank wins): env var `NAME` → JVM property `-DNAME` → dotted `-Dname.dotted` (e.g. `HTTP_PORT` → `-Dhttp.port`). This lets jar/native users configure via `-D`; env keeps precedence. See `config/Env.java#resolve`.
 
-**Kafka:** `KAFKA_BOOTSTRAP_SERVERS` (localhost:9092), `KAFKA_REQUEST_TIMEOUT_MS` (30000), `KAFKA_CHUNK_COUNT` (1), `KAFKA_CHUNK_DELAY_MS` (0). Any other `KAFKA_X_Y_Z` env var maps to `kafka.x.y.z` and is forwarded to the AdminClient. Config precedence: classpath `application.properties` < external file at `KLAG_CONFIG_FILE` < `KAFKA_*` env vars.
+**Kafka:** `KAFKA_BOOTSTRAP_SERVERS` (localhost:9092), `KAFKA_REQUEST_TIMEOUT_MS` (30000), `KAFKA_CHUNK_COUNT` (1 — chunking is *off*; only values >1 enable it), `KAFKA_CHUNK_DELAY_MS` (0), `KAFKA_MAX_CONCURRENT_GROUPS` (50 — caps how many consumer-group offset requests are in flight at once; a concurrency bound, not a throttle, so it applies regardless of chunking). Any other `KAFKA_X_Y_Z` env var maps to `kafka.x.y.z` and is forwarded to the AdminClient. Config precedence: classpath `application.properties` < external file at `KLAG_CONFIG_FILE` < `KAFKA_*` env vars.
 
 **Metrics:** `METRICS_REPORTER` (none/prometheus/datadog/otlp), `METRICS_INTERVAL_MS` (60000), `METRICS_GROUP_FILTER` (comma-separated glob patterns, default `*`), `METRICS_GROUP_EXCLUDE` (comma-separated glob patterns, default empty), `METRICS_JVM_ENABLED` (false), `CONSUMER_MEMBER_LABELS_ENABLED` (true — tag per-partition `klag.consumer.lag`, `klag.consumer.lag.ms`, and `klag.consumer.committed_offset` with `member_host`/`consumer_id`/`client_id` for the owning consumer instance; kafka-lag-exporter parity. Empty-string values for unowned partitions; set `false` to drop the labels and cut cardinality), `LAG_TREND_DEADBAND_MSG_PER_SEC` (1.0 — STABLE band for the MCP basic lag-trend classifier; |velocity| within the band is STABLE). A group is monitored iff it matches any include segment AND no exclude segment.
 

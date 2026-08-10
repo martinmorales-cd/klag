@@ -34,7 +34,7 @@ stack.
 | **Lag velocity** | Know if lag is growing or shrinking, to catch problems before they escalate. |
 | **Time-based lag estimation** | See lag in seconds/minutes, beyond raw message counts. |
 | **Hot partition detection** | Find partitions with uneven load causing bottlenecks. |
-| **Consumer group state tracking** | Alert on `preparing_rebalance`, `completing_rebalance`, `dead`, or `empty` states. |
+| **Consumer group state tracking** | Alert on `preparing_rebalance`, `completing_rebalance` (`assigning`/`reconciling` on KIP-848 groups), `dead`, or `empty` states. |
 | **Request batching** | Safely monitor large clusters without overwhelming brokers. |
 | **Stale group cleanup** | Automatically stops reporting deleted/inactive groups. |
 | **Data loss prevention** | Catch the case where lag exceeds retention and data is lost. |

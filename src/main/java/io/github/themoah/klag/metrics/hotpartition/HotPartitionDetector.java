@@ -3,6 +3,7 @@ package io.github.themoah.klag.metrics.hotpartition;
 import io.github.themoah.klag.metrics.hotpartition.StatisticalUtils.Stats;
 import io.github.themoah.klag.model.ConsumerGroupLag;
 import io.github.themoah.klag.model.ConsumerGroupLag.PartitionLag;
+import io.github.themoah.klag.model.ConsumerGroupOffsets.TopicPartitionKey;
 import io.github.themoah.klag.model.HotPartitionLag;
 import io.github.themoah.klag.model.HotPartitionThroughput;
 import java.util.ArrayList;
@@ -127,24 +128,22 @@ public class HotPartitionDetector {
   public Set<String> recordThroughputSnapshots(List<ConsumerGroupLag> lagData) {
     Set<String> activeKeys = new HashSet<>();
 
-    // Track unique topic:partition combinations (avoid duplicates from multiple consumer groups)
-    Map<String, Long> partitionOffsets = new HashMap<>();
+    // Track unique topic/partition combinations (avoid duplicates from multiple consumer groups)
+    Map<TopicPartitionKey, Long> partitionOffsets = new HashMap<>();
 
     for (ConsumerGroupLag group : lagData) {
       for (PartitionLag partition : group.partitions()) {
-        String key = PartitionThroughputTracker.makeKey(partition.topic(), partition.partition());
+        TopicPartitionKey key = new TopicPartitionKey(partition.topic(), partition.partition());
         // Use the max offset if we see the same partition from multiple groups
         partitionOffsets.merge(key, partition.logEndOffset(), Long::max);
       }
     }
 
     // Record snapshots
-    for (Map.Entry<String, Long> entry : partitionOffsets.entrySet()) {
-      String[] parts = entry.getKey().split(":");
-      String topic = parts[0];
-      int partition = Integer.parseInt(parts[1]);
-      throughputTracker.recordSnapshot(topic, partition, entry.getValue());
-      activeKeys.add(entry.getKey());
+    for (Map.Entry<TopicPartitionKey, Long> entry : partitionOffsets.entrySet()) {
+      TopicPartitionKey key = entry.getKey();
+      throughputTracker.recordSnapshot(key.topic(), key.partition(), entry.getValue());
+      activeKeys.add(PartitionThroughputTracker.makeKey(key.topic(), key.partition()));
     }
 
     return activeKeys;
@@ -164,18 +163,8 @@ public class HotPartitionDetector {
   public List<HotPartitionThroughput> detectHotPartitionsByThroughput() {
     List<HotPartitionThroughput> hotPartitions = new ArrayList<>();
 
-    Map<String, Double> allThroughputs = throughputTracker.calculateAllThroughputs();
-
-    // Group by topic
-    Map<String, Map<Integer, Double>> throughputsByTopic = new HashMap<>();
-    for (Map.Entry<String, Double> entry : allThroughputs.entrySet()) {
-      String[] parts = entry.getKey().split(":");
-      String topic = parts[0];
-      int partition = Integer.parseInt(parts[1]);
-
-      throughputsByTopic.computeIfAbsent(topic, k -> new HashMap<>())
-        .put(partition, entry.getValue());
-    }
+    Map<String, Map<Integer, Double>> throughputsByTopic =
+        throughputTracker.calculateThroughputsByTopic();
 
     // Analyze each topic
     for (Map.Entry<String, Map<Integer, Double>> topicEntry : throughputsByTopic.entrySet()) {

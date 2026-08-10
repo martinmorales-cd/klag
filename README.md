@@ -103,7 +103,7 @@ and [charts/klag/README.md](charts/klag/README.md).
 | `klag.consumer.lag.ms` | Lag in ms from Kafka log timestamps                            |
 | `klag.consumer.lag.time_to_close_seconds` | Estimated seconds until lag reaches zero    |
 | `klag.consumer.lag.retention_percent` | Lag as % of available messages (data loss alerting) |
-| `klag.consumer.group.state` | Group health: Stable, Rebalancing, Dead, Empty           |
+| `klag.consumer.group.state` | Group health: stable, preparing/completing_rebalance (assigning/reconciling on KIP-848 groups), dead, empty |
 | `klag.hot_partition[.lag]` | Partitions with statistically abnormal throughput         |
 | `klag.partition.under_replicated` | Partitions with fewer in-sync replicas than configured (ISR gap) |
 
@@ -141,7 +141,10 @@ See [CLAUDE.md](CLAUDE.md) for the complete configuration reference.
 
 ## Broker Compatibility
 
-Klag works with Apache Kafka **2.x and 3.x** brokers.
+Klag works with Apache Kafka **2.1 through 4.x** brokers. The lower bound comes from
+`kafka-clients` 4.x, which dropped support for brokers older than 2.1. CI e2e-tests
+against 4.1 and 4.2 (`scripts/e2e-strimzi-matrix.sh`); older brokers are covered by unit
+tests of the fallback paths, since Strimzi no longer ships images that old.
 
 ### Running against Kafka 2.x
 
@@ -160,7 +163,7 @@ further occurrences at DEBUG. Cause: ...
 
 Klag asks the broker for partition end-offsets using `OffsetSpec.MAX_TIMESTAMP`, an API added in Kafka 3.0 ([KIP-734](https://cwiki.apache.org/confluence/display/KAFKA/KIP-734%3A+Improve+AdminClient.listOffsets+to+return+timestamp+and+offset+for+the+record+with+the+largest+timestamp)). 2.x brokers don't support it and respond with `UnsupportedVersionException`. Klag catches that and falls back to `OffsetSpec.LATEST`, which every Kafka version supports. The fallback returns the same partition end-offset that drives every lag metric, so accuracy is preserved.
 
-**Why the fallback is necessary.** Without it, klag refuses to start on a 2.x cluster. The first metrics scrape runs synchronously during klag's startup, and a failure there propagates back up to the process launcher, which exits with code 1 — CrashLoopBackOff under Kubernetes. One consumer group on a 2.x cluster was enough to brick startup.
+**Why the fallback is necessary.** Without it, every collection cycle fails against a 2.x broker and klag exports no lag metrics at all — one consumer group on a 2.x cluster was enough. It used to be worse: the first scrape ran synchronously during startup and its failure propagated to the process launcher, which exited with code 1 (CrashLoopBackOff under Kubernetes). The first cycle is now recovered so an unreachable or incompatible broker degrades instead of bricking startup, but that only buys a running process — the fallback is what makes the metrics correct.
 
 **Note for future contributors.** On 2.x brokers, both `logEndTimestamp` and `maxTimestampOffset` fall back to the LATEST offset's timestamp/offset, so time-based lag interpolation degrades gracefully (the anchor becomes the broker-side append time of the last record rather than the highest-timestamp record).
 
@@ -225,7 +228,7 @@ End-to-end tests (k3d + real Kafka, Strimzi matrix) live in `scripts/`. See
 
 ---
 
-[![vert.x](https://img.shields.io/badge/vert.x-4.5.22-purple.svg)](https://vertx.io)
+[![vert.x](https://img.shields.io/badge/vert.x-4.5.30-purple.svg)](https://vertx.io)
 
 Some parts of the code were written with Claude
 <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="56" height="56" alt="Claude">

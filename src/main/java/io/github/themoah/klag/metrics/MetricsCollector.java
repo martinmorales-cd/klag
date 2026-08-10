@@ -1,5 +1,6 @@
 package io.github.themoah.klag.metrics;
 
+import io.github.themoah.klag.config.Env;
 import io.github.themoah.klag.kafka.ChunkConfig;
 import io.github.themoah.klag.kafka.ChunkProcessor;
 import io.github.themoah.klag.kafka.KafkaClientService;
@@ -54,6 +55,11 @@ public class MetricsCollector {
 
   private static final Logger log = LoggerFactory.getLogger(MetricsCollector.class);
 
+  // Caps how many groups have a committed-offset request in flight at once. Purely a
+  // concurrency bound, not a throttle — see fetchGroupOffsets.
+  private static final String ENV_MAX_CONCURRENT_GROUPS = "KAFKA_MAX_CONCURRENT_GROUPS";
+  private static final int DEFAULT_MAX_CONCURRENT_GROUPS = 50;
+
   private final Vertx vertx;
   private final KafkaClientService kafkaClient;
   private final MicrometerReporter reporter;
@@ -66,6 +72,7 @@ public class MetricsCollector {
   private final CommitFreshnessTracker commitFreshnessTracker;  // null when disabled
   private final boolean isrEnabled;
   private final ChunkConfig chunkConfig;
+  private final int maxConcurrentGroups;
 
   private final Map<String, Integer> cachedGroupPartitionCounts = new ConcurrentHashMap<>();
   private final Map<String, Integer> cachedTopicPartitionCounts = new ConcurrentHashMap<>();
@@ -75,6 +82,11 @@ public class MetricsCollector {
   // Cleared at the start of each cycle; cycles never overlap (in-flight guard below).
   private final Map<String, Future<List<PartitionOffsets>>> cycleTopicOffsets =
       new ConcurrentHashMap<>();
+
+  // Per-cycle cache of the cluster's topic names, used to drop deleted topics before
+  // describeTopics sees them. One list call per cycle, not per chunk. Cleared with
+  // cycleTopicOffsets; a failed lookup stays cached so the cycle fails once, not per chunk.
+  private Future<Set<String>> cycleTopicNames;
 
   // Guards against overlapping collection cycles when a cycle exceeds the interval
   // (large clusters, chunk delays). Only touched on the Vert.x event loop.
@@ -164,6 +176,8 @@ public class MetricsCollector {
       : null;
     this.isrEnabled = IsrConfig.fromEnvironment().enabled();
     this.chunkConfig = chunkConfig;
+    this.maxConcurrentGroups = Math.max(1,
+      Env.getInt(ENV_MAX_CONCURRENT_GROUPS, DEFAULT_MAX_CONCURRENT_GROUPS));
   }
 
   /**
@@ -203,8 +217,11 @@ public class MetricsCollector {
     log.info("Starting metrics collector with interval: {}ms, filter: {}, exclude: {}",
       intervalMs, groupFilter.includeDescription(), groupFilter.excludeDescription());
 
+    // The first cycle is recovered: a broker that is down at boot must degrade (like
+    // KafkaHealthMonitor) instead of failing verticle startup, which exits the process
+    // and crash-loops under Kubernetes. collectAndReport already logs the cause.
     return reporter.start()
-      .compose(v -> collectAndReport())
+      .compose(v -> collectAndReport().recover(err -> Future.succeededFuture()))
       .onComplete(ar -> {
         timerId = vertx.setPeriodic(intervalMs, id -> {
           if (collectionInFlight) {
@@ -235,6 +252,7 @@ public class MetricsCollector {
     log.debug("Collecting lag metrics");
     collectionInFlight = true;
     cycleTopicOffsets.clear();
+    cycleTopicNames = null;
     long cycleStartNanos = System.nanoTime();
 
     return kafkaClient.listConsumerGroups()
@@ -247,11 +265,10 @@ public class MetricsCollector {
           groups.size(), filteredGroups.size());
 
         if (filteredGroups.isEmpty()) {
-          reporter.cleanupStaleGauges(Set.of());
-          reporter.cleanupStateTracker(Set.of());
-          if (commitFreshnessTracker != null) {
-            commitFreshnessTracker.cleanupStale(Set.of());
-          }
+          // Same cycle-end path as a normal cycle, with empty key sets: every tracker
+          // drains and the MCP snapshot refreshes to empty instead of staying frozen
+          // at the last non-empty cycle.
+          finishCycle(new CycleState(newCycleSnapshot()));
           return Future.succeededFuture();
         }
 
@@ -273,11 +290,11 @@ public class MetricsCollector {
    * Original non-chunked path: collects all groups in parallel.
    */
   private Future<Void> collectAllGroupsParallel(Set<String> filteredGroups) {
-    Future<List<ConsumerGroupLag>> lagFuture = collectAllGroupLags(filteredGroups);
+    CycleState cycle = new CycleState(newCycleSnapshot());
+    Future<List<ConsumerGroupLag>> lagFuture = collectGroupLags(filteredGroups, cycle);
     Future<Map<String, ConsumerGroupState>> stateFuture =
         kafkaClient.describeConsumerGroups(filteredGroups);
 
-    CycleState cycle = new CycleState(newCycleSnapshot());
     return Future.all(lagFuture, stateFuture)
       .map(composite -> {
         List<ConsumerGroupLag> lagData = composite.resultAt(0);
@@ -320,13 +337,7 @@ public class MetricsCollector {
   private Future<Void> processGroupChunk(List<String> chunk, CycleState cycle) {
     log.debug("Processing group chunk with {} groups", chunk.size());
 
-    Future<List<ConsumerGroupLag>> lagFuture;
-    if (chunkConfig.isChunkingEnabled()) {
-      lagFuture = collectGroupLagsChunked(chunk);
-    } else {
-      lagFuture = collectAllGroupLags(new HashSet<>(chunk));
-    }
-
+    Future<List<ConsumerGroupLag>> lagFuture = collectGroupLags(chunk, cycle);
     Future<Map<String, ConsumerGroupState>> stateFuture =
         kafkaClient.describeConsumerGroups(new HashSet<>(chunk));
 
@@ -359,14 +370,23 @@ public class MetricsCollector {
    * retainAll against the keys observed in the whole cycle: running any of them with a
    * chunk-local subset wipes the accumulated state of every other chunk.
    *
-   * <p>Partial cycles (a chunk failed) skip cleanup and publish entirely: the failed
-   * chunk's keys are missing from the accumulators, and cleaning up against an incomplete
-   * key set would mark or delete live series. Stale values beat deleted series.
+   * <p>Partial cycles (a chunk or a single group failed) skip cleanup: the failed keys are
+   * missing from the accumulators, and cleaning up against an incomplete key set would mark
+   * or delete live series. Stale values beat deleted series. Note this means a permanently
+   * failing group (ACL gap, wedged coordinator) freezes cleanup indefinitely — the WARN below
+   * names the group; fix its ACL or exclude it via METRICS_GROUP_EXCLUDE.
+   *
+   * <p>The MCP snapshot still publishes on a partial cycle, because freezing it would leave
+   * agents reading hours-old data while /metrics stays current. The exception is an empty
+   * snapshot: nothing was collected at all, and wiping the agent view is worse than a stale one.
    */
   private void finishCycle(CycleState cycle) {
     if (cycle.partial) {
-      log.warn("Collection cycle was partial (at least one chunk failed); "
+      log.warn("Collection cycle was partial (at least one chunk or group failed); "
         + "keeping previous metrics and skipping stale cleanup until a full cycle succeeds");
+      if (cycle.snapshot != null && !cycle.snapshot.groups.isEmpty()) {
+        publishSnapshot(cycle.snapshot);
+      }
       return;
     }
     velocityTracker.cleanupStaleTopics(cycle.velocityKeys);
@@ -385,108 +405,28 @@ public class MetricsCollector {
   }
 
   /**
-   * Collects lag for a list of groups with topic-level chunking.
+   * Collects lag for a set of groups in two phases.
+   *
+   * <p>Phase 1 fetches every group's committed offsets (bounded fan-out). Phase 2 takes the
+   * union of the topics those groups consume and resolves all of them in a single batched
+   * call. That batching is the point: fetching offsets per topic cost four admin requests
+   * per topic per cycle, so a few hundred topics meant hundreds of round-trips and cycles
+   * that overran the interval. The batched fetch costs four for the whole set.
+   *
+   * <p>Phase 3 is pure assembly — no I/O — because every group's topics are already resolved.
    */
-  private Future<List<ConsumerGroupLag>> collectGroupLagsChunked(List<String> groups) {
-    List<Future<ConsumerGroupLag>> futures = groups.stream()
-      .map(this::collectGroupLagChunked)
-      .collect(Collectors.toList());
-
-    return Future.all(futures)
-      .map(composite -> {
-        List<ConsumerGroupLag> results = new ArrayList<>();
-        for (int i = 0; i < composite.size(); i++) {
-          ConsumerGroupLag lag = composite.resultAt(i);
-          if (lag != null) {
-            results.add(lag);
-          }
-        }
-        return results;
-      });
-  }
-
-  /**
-   * Collects lag for a single group with topic-level chunking for log end offset fetches.
-   */
-  private Future<ConsumerGroupLag> collectGroupLagChunked(String groupId) {
-    return kafkaClient.getConsumerGroupOffsets(groupId)
-      .compose(offsets -> {
-        Set<String> topics = offsets.offsets().keySet().stream()
+  private Future<List<ConsumerGroupLag>> collectGroupLags(
+      Collection<String> groups, CycleState cycle) {
+    return fetchGroupOffsets(groups, cycle)
+      .compose(offsetsByGroup -> {
+        Set<String> topics = offsetsByGroup.values().stream()
+          .flatMap(offsets -> offsets.offsets().keySet().stream())
           .map(TopicPartitionKey::topic)
           .collect(Collectors.toSet());
 
-        if (topics.isEmpty()) {
-          return Future.succeededFuture(ConsumerGroupLag.fromPartitions(groupId, List.of()));
-        }
-
-        // Balance topics into chunks
-        List<List<String>> topicChunks = ChunkProcessor.balanceIntoChunks(
-          topics, chunkConfig.chunkCount(),
-          topic -> cachedTopicPartitionCounts.getOrDefault(topic, 1));
-
-        // Process topic chunks sequentially, each chunk fetches offsets in parallel
-        return ChunkProcessor.<String, List<PartitionOffsets>>processSequentially(
-          vertx, topicChunks, chunkConfig.chunkDelayMs(),
-          topicChunk -> {
-            List<Future<List<PartitionOffsets>>> offsetFutures = topicChunk.stream()
-              .map(this::getLogEndOffsetsCached)
-              .collect(Collectors.toList());
-
-            return Future.all(offsetFutures)
-              .map(composite -> {
-                List<PartitionOffsets> merged = new ArrayList<>();
-                for (int i = 0; i < composite.size(); i++) {
-                  List<PartitionOffsets> partitionOffsets = composite.resultAt(i);
-                  merged.addAll(partitionOffsets);
-                }
-                return merged;
-              });
-          }
-        ).map(chunkResults -> {
-          // Merge all partition offsets from all topic chunks
-          Map<TopicPartitionKey, PartitionOffsets> topicOffsets = new HashMap<>();
-          for (List<PartitionOffsets> chunkResult : chunkResults) {
-            for (PartitionOffsets po : chunkResult) {
-              TopicPartitionKey key = new TopicPartitionKey(po.topic(), po.partition());
-              topicOffsets.put(key, po);
-              // Update cached topic partition counts
-              cachedTopicPartitionCounts.merge(po.topic(), 1, Integer::max);
-            }
-          }
-
-          // Update cached topic partition counts with actual partition counts
-          Map<String, Integer> topicPartitionCounts = new HashMap<>();
-          for (PartitionOffsets po : topicOffsets.values()) {
-            topicPartitionCounts.merge(po.topic(), 1, Integer::sum);
-          }
-          cachedTopicPartitionCounts.putAll(topicPartitionCounts);
-
-          return buildConsumerGroupLag(groupId, offsets, topicOffsets);
-        });
-      })
-      // Same recovery as collectGroupLag: a single failed group must not abort the chunk.
-      .recover(err -> {
-        log.warn("Failed to collect lag for group {} (skipped this cycle): {}",
-          groupId, err.getMessage());
-        return Future.succeededFuture(null);
-      });
-  }
-
-  private Future<List<ConsumerGroupLag>> collectAllGroupLags(Set<String> groups) {
-    List<Future<ConsumerGroupLag>> futures = groups.stream()
-      .map(this::collectGroupLag)
-      .collect(Collectors.toList());
-
-    return Future.all(futures)
-      .map(composite -> {
-        List<ConsumerGroupLag> results = new ArrayList<>();
-        for (int i = 0; i < composite.size(); i++) {
-          ConsumerGroupLag lag = composite.resultAt(i);
-          if (lag != null) {
-            results.add(lag);
-          }
-        }
-        return results;
+        return fetchTopicOffsets(topics).map(topicOffsets -> offsetsByGroup.entrySet().stream()
+          .map(entry -> buildConsumerGroupLag(entry.getKey(), entry.getValue(), topicOffsets))
+          .collect(Collectors.toList()));
       });
   }
 
@@ -639,51 +579,152 @@ public class MetricsCollector {
     log.debug("Reported metrics for {} consumer groups", lagData.size());
   }
 
-  private Future<ConsumerGroupLag> collectGroupLag(String groupId) {
-    return kafkaClient.getConsumerGroupOffsets(groupId)
-      .compose(offsets -> {
-        Set<String> topics = offsets.offsets().keySet().stream()
-          .map(TopicPartitionKey::topic)
-          .collect(Collectors.toSet());
+  /**
+   * Phase 1: committed offsets for every group, in waves of at most
+   * {@code maxConcurrentGroups}.
+   *
+   * <p>Without the bound, every group's {@code listConsumerGroupOffsets} is in flight at
+   * once; on a cluster with thousands of groups that saturates the admin client's request
+   * queue and the group coordinators. The waves have no delay between them — this bounds
+   * concurrency, it is not a throttle. {@code KAFKA_CHUNK_COUNT}/{@code KAFKA_CHUNK_DELAY_MS}
+   * remain the explicit broker-load throttle.
+   *
+   * @return group ID to its committed offsets; groups that failed are absent
+   */
+  private Future<Map<String, ConsumerGroupOffsets>> fetchGroupOffsets(
+      Collection<String> groups, CycleState cycle) {
+    Map<String, ConsumerGroupOffsets> byGroup = new HashMap<>();
 
-        if (topics.isEmpty()) {
-          return Future.succeededFuture(ConsumerGroupLag.fromPartitions(groupId, List.of()));
-        }
-
-        // Get log end offsets for all topics the group is consuming
-        List<Future<List<PartitionOffsets>>> offsetFutures = topics.stream()
-          .map(this::getLogEndOffsetsCached)
+    return ChunkProcessor.<String, Void>processSequentially(
+      vertx, waves(groups, maxConcurrentGroups), 0,
+      wave -> {
+        List<Future<ConsumerGroupOffsets>> futures = wave.stream()
+          // Recover to null so one failing group (deleted mid-cycle, coordinator hiccup,
+          // ACL gap) is skipped rather than failing the wave and aborting the cycle for
+          // every other group. The cycle is marked partial: a skipped group's keys are
+          // absent from the accumulators, so the retainAll cleanups in finishCycle would
+          // delete its live series instead of holding the last good values.
+          .map(groupId -> kafkaClient.getConsumerGroupOffsets(groupId)
+            .recover(err -> {
+              cycle.partial = true;
+              log.warn("Failed to collect lag for group {} (skipped this cycle): {}",
+                groupId, err.getMessage());
+              return Future.succeededFuture(null);
+            }))
           .collect(Collectors.toList());
 
-        return Future.all(offsetFutures)
-          .map(composite -> {
-            Map<TopicPartitionKey, PartitionOffsets> topicOffsets = new HashMap<>();
-            for (int i = 0; i < composite.size(); i++) {
-              List<PartitionOffsets> partitionOffsets = composite.resultAt(i);
-              for (PartitionOffsets po : partitionOffsets) {
-                TopicPartitionKey key = new TopicPartitionKey(po.topic(), po.partition());
-                topicOffsets.put(key, po);
-              }
+        return Future.all(futures).<Void>map(composite -> {
+          for (int i = 0; i < composite.size(); i++) {
+            ConsumerGroupOffsets offsets = composite.resultAt(i);
+            if (offsets != null) {
+              byGroup.put(wave.get(i), offsets);
             }
-            return buildConsumerGroupLag(groupId, offsets, topicOffsets);
-          });
-      })
-      // Recover to null so one failing group (deleted mid-cycle, coordinator hiccup, ACL gap)
-      // is skipped by the null-filter in collectAllGroupLags instead of failing Future.all
-      // and aborting the whole cycle for every other group.
-      .recover(err -> {
-        log.warn("Failed to collect lag for group {} (skipped this cycle): {}",
-          groupId, err.getMessage());
-        return Future.succeededFuture(null);
-      });
+          }
+          return null;
+        });
+      }
+    ).map(v -> byGroup);
   }
 
   /**
-   * Per-cycle cached variant of {@link KafkaClientService#getLogEndOffsets(String)}.
-   * Multiple groups consuming the same topic reuse one in-flight (or completed) future.
+   * Phase 2: resolves every topic in one batched fetch and fills {@link #cycleTopicOffsets}.
+   *
+   * <p>When chunking is enabled the union is split into {@code chunkCount} batches processed
+   * sequentially with the configured delay, so the load-spreading knob still works — it now
+   * spreads a handful of batched calls instead of four calls per topic.
+   *
+   * <p>A failure here fails the cycle (or marks the chunk partial) rather than silently
+   * yielding empty lag: {@link #finishCycle} is then skipped and existing gauges are kept.
+   * Stale values beat deleting live series over a transient broker error.
+   *
+   * <p>Topics are first filtered against the cluster's topic list. The Vert.x admin wrapper
+   * resolves describeTopics through {@code allTopicNames()}, so a single unknown topic fails
+   * the whole batch — and a group's committed offsets outlive a deleted topic until
+   * {@code offsets.retention.minutes} (7 days by default), which would keep every cycle
+   * partial, and therefore stale-gauge cleanup frozen, for that long. Dropping the topic here
+   * makes deletion look like deletion: its series go missing from the cycle's key set and are
+   * retired within 1-2 cycles.
+   *
+   * @return flattened topic-partition to offsets lookup for lag assembly
    */
-  private Future<List<PartitionOffsets>> getLogEndOffsetsCached(String topic) {
-    return cycleTopicOffsets.computeIfAbsent(topic, kafkaClient::getLogEndOffsets);
+  private Future<Map<TopicPartitionKey, PartitionOffsets>> fetchTopicOffsets(Set<String> topics) {
+    Map<TopicPartitionKey, PartitionOffsets> merged = new HashMap<>();
+
+    // With chunking on this runs once per group chunk, and chunks routinely share topics.
+    // Reuse whatever an earlier chunk already resolved this cycle instead of refetching it.
+    Set<String> missing = new HashSet<>();
+    for (String topic : topics) {
+      Future<List<PartitionOffsets>> resolved = cycleTopicOffsets.get(topic);
+      if (resolved != null && resolved.succeeded()) {
+        index(merged, resolved.result());
+      } else {
+        missing.add(topic);
+      }
+    }
+    if (missing.isEmpty()) {
+      return Future.succeededFuture(merged);
+    }
+
+    // A failed listTopics propagates: filtering must never silently fall through unfiltered,
+    // which is what reintroduces the week-long cleanup freeze.
+    return clusterTopics().compose(existing -> {
+      Set<String> gone = new HashSet<>(missing);
+      gone.removeAll(existing);
+      if (!gone.isEmpty()) {
+        // Also covers topics the principal cannot see: with asymmetric ACLs (group offsets
+        // readable, topic not) klag cannot tell that apart from deletion and retires the series.
+        log.info("Skipping {} topic(s) absent from the cluster topic list (deleted or not "
+          + "visible to this principal); their series are retired: {}", gone.size(), gone);
+        missing.removeAll(gone);
+      }
+      if (missing.isEmpty()) {
+        return Future.succeededFuture(merged);
+      }
+
+      List<List<String>> topicChunks = chunkConfig.isChunkingEnabled()
+        ? ChunkProcessor.balanceIntoChunks(missing, chunkConfig.chunkCount(),
+            topic -> cachedTopicPartitionCounts.getOrDefault(topic, 1))
+        : List.of(new ArrayList<>(missing));
+
+      return ChunkProcessor.<String, Void>processSequentially(
+        vertx, topicChunks, chunkConfig.chunkDelayMs(),
+        chunk -> kafkaClient.getLogEndOffsets(new HashSet<>(chunk)).<Void>map(byTopic -> {
+          byTopic.forEach((topic, partitions) -> {
+            // Publish as a completed future: the ISR check reads cycleTopicOffsets and treats
+            // an absent or failed entry as "metadata unavailable, skip this topic".
+            cycleTopicOffsets.put(topic, Future.succeededFuture(partitions));
+            cachedTopicPartitionCounts.put(topic, partitions.size());
+            index(merged, partitions);
+          });
+          return null;
+        })
+      ).map(v -> merged);
+    });
+  }
+
+  /** Cluster topic names, fetched at most once per cycle and shared by every chunk. */
+  private Future<Set<String>> clusterTopics() {
+    if (cycleTopicNames == null) {
+      cycleTopicNames = kafkaClient.listTopics();
+    }
+    return cycleTopicNames;
+  }
+
+  private static void index(
+      Map<TopicPartitionKey, PartitionOffsets> target, List<PartitionOffsets> partitions) {
+    for (PartitionOffsets po : partitions) {
+      target.put(new TopicPartitionKey(po.topic(), po.partition()), po);
+    }
+  }
+
+  /** Splits items into consecutive groups of at most {@code size}. */
+  private static <T> List<List<T>> waves(Collection<T> items, int size) {
+    List<T> all = new ArrayList<>(items);
+    List<List<T>> waves = new ArrayList<>();
+    for (int i = 0; i < all.size(); i += size) {
+      waves.add(all.subList(i, Math.min(i + size, all.size())));
+    }
+    return waves;
   }
 
   private ConsumerGroupLag buildConsumerGroupLag(
@@ -900,7 +941,7 @@ public class MetricsCollector {
       log.debug("Skipped {} partitions with no lag_ms estimate", skippedPartitions);
     }
     if (!lagMsList.isEmpty()) {
-      log.info("Calculated lag_ms for {} consumer-group/topic pairs", lagMsList.size());
+      log.debug("Calculated lag_ms for {} consumer-group/topic pairs", lagMsList.size());
     }
 
     return lagMsList;
@@ -945,7 +986,8 @@ public class MetricsCollector {
    *
    * <p>Each set gathers the keys observed across all chunks so the retainAll-based
    * cleanups in {@link #finishCycle(CycleState)} see the complete cycle. {@code partial}
-   * is set when a chunk fails, which suppresses cleanup and snapshot publish for the cycle.
+   * is set when a chunk fails, which suppresses cleanup for the cycle (the snapshot still
+   * publishes unless it is empty).
    */
   private static class CycleState {
     final Set<String> activeKeys = new HashSet<>();

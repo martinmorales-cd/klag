@@ -57,7 +57,8 @@ public class PartitionOffsetHistory {
 
     // Log when we first have enough data for interpolation
     if (!hasLoggedDataReady && points.size() >= MIN_POINTS_FOR_INTERPOLATION) {
-      log.info("Collected {} samples for {}:{} - interpolation now available",
+      // This message can be very noisy on big cluster
+      log.debug("Collected {} samples for {}:{} - interpolation now available",
         MIN_POINTS_FOR_INTERPOLATION, topic, partition);
       hasLoggedDataReady = true;
     }

@@ -82,28 +82,53 @@ public class KafkaClientServiceImpl implements KafkaClientService {
   public Future<Set<String>> listTopics() {
     log.debug("Listing all topics");
     return adminClient.listTopics()
-      .onSuccess(topics -> log.info("Listed {} topics", topics.size()))
+      .onSuccess(topics -> log.debug("Listed {} topics", topics.size()))
       .onFailure(err -> log.error("Failed to list topics", err));
   }
 
   @Override
   public Future<List<PartitionInfo>> listPartitions(String topic) {
     Objects.requireNonNull(topic, "topic cannot be null");
-    log.debug("Listing partitions for topic: {}", topic);
 
-    return adminClient.describeTopics(Collections.singletonList(topic))
-      .map(descriptions -> {
-        TopicDescription description = descriptions.get(topic);
-        if (description == null) {
+    return describePartitions(Set.of(topic))
+      .map(byTopic -> {
+        List<PartitionInfo> partitions = byTopic.get(topic);
+        if (partitions == null) {
           throw new IllegalArgumentException("Topic not found: " + topic);
         }
-        List<PartitionInfo> partitions = description.getPartitions().stream()
-          .map(partition -> toPartitionInfo(topic, partition))
-          .collect(Collectors.toList());
-        log.info("Topic {} has {} partitions", topic, partitions.size());
         return partitions;
+      });
+  }
+
+  /**
+   * Describes every given topic in a single {@code describeTopics} round-trip.
+   *
+   * <p>Note the Vert.x wrapper resolves this through {@code DescribeTopicsResult.allTopicNames()},
+   * so an unknown or unauthorized topic fails the whole batch before this mapping runs — callers
+   * must filter deleted topics out beforehand (MetricsCollector does, against listTopics). The
+   * null-description skip below only covers a broker returning a short map for a topic it did
+   * accept; it is deliberately tolerant so one odd topic cannot blind the whole cycle.
+   */
+  private Future<Map<String, List<PartitionInfo>>> describePartitions(Set<String> topics) {
+    log.debug("Describing partitions for {} topics", topics.size());
+
+    return adminClient.describeTopics(new ArrayList<>(topics))
+      .map(descriptions -> {
+        Map<String, List<PartitionInfo>> byTopic = new HashMap<>();
+        for (String topic : topics) {
+          TopicDescription description = descriptions.get(topic);
+          if (description == null || description.getPartitions() == null) {
+            log.warn("No topic metadata returned for {}; skipping it this cycle", topic);
+            continue;
+          }
+          byTopic.put(topic, description.getPartitions().stream()
+            .map(partition -> toPartitionInfo(topic, partition))
+            .collect(Collectors.toList()));
+        }
+        log.debug("Described {} of {} requested topics", byTopic.size(), topics.size());
+        return byTopic;
       })
-      .onFailure(err -> log.error("Failed to list partitions for topic: {}", topic, err));
+      .onFailure(err -> log.error("Failed to describe {} topics", topics.size(), err));
   }
 
   // Kafka 3.0+ MAX_TIMESTAMP spec value (not exposed by Vert.x wrapper)
@@ -113,10 +138,36 @@ public class KafkaClientServiceImpl implements KafkaClientService {
   @Override
   public Future<List<PartitionOffsets>> getLogEndOffsets(String topic) {
     Objects.requireNonNull(topic, "topic cannot be null");
-    log.debug("Getting log end offsets for topic: {}", topic);
+    return getLogEndOffsets(Set.of(topic))
+      .map(byTopic -> byTopic.getOrDefault(topic, List.of()));
+  }
 
-    return listPartitions(topic)
-      .compose(partitions -> {
+  /**
+   * Batched offset fetch: one {@code describeTopics} plus exactly three {@code listOffsets}
+   * calls for the entire topic set, regardless of how many topics it contains.
+   *
+   * <p>The Kafka AdminClient already splits a multi-topic {@code listOffsets} into one request
+   * per leader broker, so batching here is what keeps admin request volume proportional to
+   * cluster size rather than to (topic count x 4).
+   */
+  @Override
+  public Future<Map<String, List<PartitionOffsets>>> getLogEndOffsets(Set<String> topics) {
+    Objects.requireNonNull(topics, "topics cannot be null");
+    if (topics.isEmpty()) {
+      return Future.succeededFuture(Map.of());
+    }
+    log.debug("Getting log end offsets for {} topics", topics.size());
+
+    return describePartitions(topics)
+      .compose(partitionsByTopic -> {
+        if (partitionsByTopic.isEmpty()) {
+          // Topics were requested and none came back with metadata: that is blindness, not
+          // "no topics". Succeeding empty here would make the cycle look complete and let
+          // stale-gauge cleanup delete every series in the cluster.
+          return Future.<Map<String, List<PartitionOffsets>>>failedFuture(new IllegalStateException(
+            "No topic metadata returned for any of the " + topics.size() + " requested topics"));
+        }
+
         // Use MAX_TIMESTAMP to get the offset with highest timestamp (Kafka 3.0+)
         // Use TIMESTAMP(0) to get earliest offset with its timestamp
         // Use LATEST as fallback for offset if MAX_TIMESTAMP fails
@@ -124,14 +175,16 @@ public class KafkaClientServiceImpl implements KafkaClientService {
         Map<TopicPartition, OffsetSpec> earliestTimestampRequest = new HashMap<>();
         Map<TopicPartition, OffsetSpec> latestOffsetRequest = new HashMap<>();
 
-        for (PartitionInfo partition : partitions) {
-          TopicPartition tp = new TopicPartition(topic, partition.partition());
-          maxTimestampRequest.put(tp, new OffsetSpec(MAX_TIMESTAMP_SPEC));
-          earliestTimestampRequest.put(tp, OffsetSpec.TIMESTAMP(0));
-          latestOffsetRequest.put(tp, OffsetSpec.LATEST);
-        }
+        partitionsByTopic.forEach((topic, partitions) -> {
+          for (PartitionInfo partition : partitions) {
+            TopicPartition tp = new TopicPartition(topic, partition.partition());
+            maxTimestampRequest.put(tp, new OffsetSpec(MAX_TIMESTAMP_SPEC));
+            earliestTimestampRequest.put(tp, OffsetSpec.TIMESTAMP(0));
+            latestOffsetRequest.put(tp, OffsetSpec.LATEST);
+          }
+        });
 
-        // Three queries:
+        // Three queries, each spanning every partition of every requested topic:
         // 1. MAX_TIMESTAMP - returns offset with highest timestamp (Kafka 3.0+)
         // 2. TIMESTAMP(0) - returns earliest offset with its timestamp
         // 3. LATEST - fallback for actual latest offset
@@ -162,86 +215,99 @@ public class KafkaClientServiceImpl implements KafkaClientService {
                   + "falling back to LATEST for logEndTimestamp. Logged once per process; "
                   + "further occurrences at DEBUG. Cause: {}", composite.cause(0).toString());
             } else {
-              log.debug("MAX_TIMESTAMP listOffsets failed for topic {}; using LATEST fallback", topic);
+              log.debug("MAX_TIMESTAMP listOffsets failed; using LATEST fallback");
             }
             maxTimestampOffsets = Collections.emptyMap();
           } else {
             maxTimestampOffsets = composite.resultAt(0);
           }
-          Map<TopicPartition, ListOffsetsResultInfo> earliestTimestampOffsets = composite.resultAt(1);
-          Map<TopicPartition, ListOffsetsResultInfo> latestOffsets = composite.resultAt(2);
 
-          List<PartitionOffsets> result = new ArrayList<>();
-          boolean loggedSampleTimestamp = false;
-
-          for (PartitionInfo partition : partitions) {
-            TopicPartition tp = new TopicPartition(topic, partition.partition());
-
-            ListOffsetsResultInfo earliestResult = earliestTimestampOffsets.get(tp);
-            ListOffsetsResultInfo maxTimestampResult = maxTimestampOffsets.get(tp);
-            ListOffsetsResultInfo latestOffsetResult = latestOffsets.get(tp);
-
-            // The partition list comes from a separate describeTopics call; a partition can
-            // be missing from a listOffsets response (leaderless partition, partition added
-            // mid-call, per-partition broker error). Skip it instead of NPEing the whole topic.
-            if (earliestResult == null || latestOffsetResult == null) {
-              log.warn("Missing listOffsets result for {}-{} (earliest={}, latest={}); skipping partition",
-                topic, partition.partition(), earliestResult != null, latestOffsetResult != null);
-              continue;
-            }
-
-            // Get earliest offset and timestamp from TIMESTAMP(0)
-            long logStartOffset = earliestResult.getOffset();
-            long logStartTimestamp = earliestResult.getTimestamp();
-
-            // logEndOffset is ALWAYS the true end-of-log (LATEST). This is the boundary
-            // for lag = logEndOffset - committedOffset, throughput, and retention.
-            long logEndOffset = latestOffsetResult.getOffset();
-
-            // The timestamp anchor comes from MAX_TIMESTAMP (offset of the highest-timestamp
-            // record). This offset can be < logEndOffset, so carry it separately rather than
-            // overwriting logEndOffset, otherwise interpolation anchors and lag disagree.
-            long logEndTimestamp;
-            long maxTimestampOffset;
-
-            if (maxTimestampResult != null
-                && maxTimestampResult.getOffset() >= 0
-                && maxTimestampResult.getTimestamp() > 0) {
-              // MAX_TIMESTAMP returned a valid offset/timestamp anchor
-              maxTimestampOffset = maxTimestampResult.getOffset();
-              logEndTimestamp = maxTimestampResult.getTimestamp();
-            } else {
-              // MAX_TIMESTAMP missing/failed (pre-3.0 broker or no timestamps) - fall back to LATEST
-              maxTimestampOffset = latestOffsetResult.getOffset();
-              logEndTimestamp = latestOffsetResult.getTimestamp();
-            }
-
-            // Handle edge case: if earliest also returns -1, topic may be empty
-            if (logStartOffset < 0) {
-              logStartOffset = 0;
-              logStartTimestamp = -1;
-            }
-
-            // Log first partition's timestamps at INFO level for debugging
-            if (!loggedSampleTimestamp) {
-              log.info("Topic {} sample timestamps: partition {} logStart={} (ts={}), logEnd={}, maxTsOffset={} (ts={})",
-                topic, partition.partition(), logStartOffset, logStartTimestamp, logEndOffset, maxTimestampOffset, logEndTimestamp);
-              loggedSampleTimestamp = true;
-            } else {
-              log.debug("Topic {} partition {}: logStart={} (ts={}), logEnd={}, maxTsOffset={} (ts={})",
-                topic, partition.partition(), logStartOffset, logStartTimestamp, logEndOffset, maxTimestampOffset, logEndTimestamp);
-            }
-
-            result.add(new PartitionOffsets(topic, partition.partition(), logEndOffset, logStartOffset,
-              logEndTimestamp, maxTimestampOffset, logStartTimestamp,
-              partition.replicas().size(), partition.inSyncReplicas().size()));
-          }
-
-          log.info("Retrieved offsets for {} partitions of topic {}", result.size(), topic);
-          return Future.succeededFuture(result);
+          return Future.succeededFuture(assembleOffsets(partitionsByTopic, maxTimestampOffsets,
+            composite.resultAt(1), composite.resultAt(2)));
         });
       })
-      .onFailure(err -> log.error("Failed to get log end offsets for topic: {}", topic, err));
+      .onFailure(err -> log.error("Failed to get log end offsets for {} topics", topics.size(), err));
+  }
+
+  /**
+   * Turns the three raw listOffsets responses into {@link PartitionOffsets} grouped by topic.
+   *
+   * <p>Package-private and static so the offset/timestamp derivation — the MAX_TIMESTAMP
+   * fallback, the empty-partition edge case, the missing-partition skip — is testable without
+   * a broker or an admin client.
+   */
+  static Map<String, List<PartitionOffsets>> assembleOffsets(
+      Map<String, List<PartitionInfo>> partitionsByTopic,
+      Map<TopicPartition, ListOffsetsResultInfo> maxTimestampOffsets,
+      Map<TopicPartition, ListOffsetsResultInfo> earliestTimestampOffsets,
+      Map<TopicPartition, ListOffsetsResultInfo> latestOffsets) {
+
+    Map<String, List<PartitionOffsets>> byTopic = new HashMap<>();
+
+    partitionsByTopic.forEach((topic, partitions) -> {
+      List<PartitionOffsets> result = new ArrayList<>(partitions.size());
+
+      for (PartitionInfo partition : partitions) {
+        TopicPartition tp = new TopicPartition(topic, partition.partition());
+
+        ListOffsetsResultInfo earliestResult = earliestTimestampOffsets.get(tp);
+        ListOffsetsResultInfo maxTimestampResult = maxTimestampOffsets.get(tp);
+        ListOffsetsResultInfo latestOffsetResult = latestOffsets.get(tp);
+
+        // The partition list comes from a separate describeTopics call; a partition can
+        // be missing from a listOffsets response (leaderless partition, partition added
+        // mid-call, per-partition broker error). Skip it instead of NPEing the whole topic.
+        if (earliestResult == null || latestOffsetResult == null) {
+          log.warn("Missing listOffsets result for {}-{} (earliest={}, latest={}); skipping partition",
+            topic, partition.partition(), earliestResult != null, latestOffsetResult != null);
+          continue;
+        }
+
+        // Get earliest offset and timestamp from TIMESTAMP(0)
+        long logStartOffset = earliestResult.getOffset();
+        long logStartTimestamp = earliestResult.getTimestamp();
+
+        // logEndOffset is ALWAYS the true end-of-log (LATEST). This is the boundary
+        // for lag = logEndOffset - committedOffset, throughput, and retention.
+        long logEndOffset = latestOffsetResult.getOffset();
+
+        // The timestamp anchor comes from MAX_TIMESTAMP (offset of the highest-timestamp
+        // record). This offset can be < logEndOffset, so carry it separately rather than
+        // overwriting logEndOffset, otherwise interpolation anchors and lag disagree.
+        long logEndTimestamp;
+        long maxTimestampOffset;
+
+        if (maxTimestampResult != null
+            && maxTimestampResult.getOffset() >= 0
+            && maxTimestampResult.getTimestamp() > 0) {
+          // MAX_TIMESTAMP returned a valid offset/timestamp anchor
+          maxTimestampOffset = maxTimestampResult.getOffset();
+          logEndTimestamp = maxTimestampResult.getTimestamp();
+        } else {
+          // MAX_TIMESTAMP missing/failed (pre-3.0 broker or no timestamps) - fall back to LATEST
+          maxTimestampOffset = latestOffsetResult.getOffset();
+          logEndTimestamp = latestOffsetResult.getTimestamp();
+        }
+
+        // Handle edge case: if earliest also returns -1, topic may be empty
+        if (logStartOffset < 0) {
+          logStartOffset = 0;
+          logStartTimestamp = -1;
+        }
+
+        log.debug("Topic {} partition {}: logStart={} (ts={}), logEnd={}, maxTsOffset={} (ts={})",
+          topic, partition.partition(), logStartOffset, logStartTimestamp, logEndOffset,
+          maxTimestampOffset, logEndTimestamp);
+
+        result.add(new PartitionOffsets(topic, partition.partition(), logEndOffset, logStartOffset,
+          logEndTimestamp, maxTimestampOffset, logStartTimestamp,
+          partition.replicas().size(), partition.inSyncReplicas().size()));
+      }
+
+      byTopic.put(topic, result);
+    });
+
+    return byTopic;
   }
 
   @Override
@@ -292,7 +358,7 @@ public class KafkaClientServiceImpl implements KafkaClientService {
       lastMissingByGroup.remove(groupId);
     }
 
-    log.info("Retrieved {} partition offsets for consumer group {}", offsetMap.size(), groupId);
+    log.debug("Retrieved {} partition offsets for consumer group {}", offsetMap.size(), groupId);
     return new ConsumerGroupOffsets(groupId, offsetMap);
   }
 
@@ -317,7 +383,7 @@ public class KafkaClientServiceImpl implements KafkaClientService {
         // ephemeral group IDs (console-consumer-*, CI runs) leak entries for the
         // process lifetime.
         lastMissingByGroup.keySet().retainAll(groups);
-        log.info("Listed {} consumer groups", groups.size());
+        log.debug("Listed {} consumer groups", groups.size());
       })
       .onFailure(err -> log.error("Failed to list consumer groups", err));
   }
@@ -335,12 +401,15 @@ public class KafkaClientServiceImpl implements KafkaClientService {
       .map(descriptions -> {
         Map<String, ConsumerGroupState> result = new HashMap<>();
         descriptions.forEach((groupId, description) -> {
+          // Pass the name, not the enum: kafka-clients 4.x deprecated ConsumerGroupState
+          // for removal, but the Vert.x wrapper still returns it. See State#fromKafkaState.
+          var kafkaState = description.getState();
           ConsumerGroupState.State state = ConsumerGroupState.State
-              .fromKafkaState(description.getState());
+              .fromKafkaState(kafkaState == null ? null : kafkaState.name());
           result.put(groupId, new ConsumerGroupState(groupId, state, partitionOwners(description)));
           log.debug("Consumer group {} state: {}", groupId, state);
         });
-        log.info("Described {} consumer groups", result.size());
+        log.debug("Described {} consumer groups", result.size());
         return result;
       })
       .onFailure(err -> log.error("Failed to describe consumer groups", err));
@@ -416,13 +485,26 @@ public class KafkaClientServiceImpl implements KafkaClientService {
       .onFailure(err -> log.error("Failed to close Kafka admin client", err));
   }
 
-  private PartitionInfo toPartitionInfo(String topic, TopicPartitionInfo tpi) {
+  // Kafka reports a null leader for offline partitions, and can report null replica/ISR
+  // lists alongside it. Dereferencing those blindly throws inside the describeTopics
+  // mapper, which would fail the whole batched fetch — one offline partition anywhere in
+  // the cluster would blind every topic for the cycle. Degrade instead: leader -1, empty
+  // replica/ISR lists. An empty replica list yields replicaCount 0, which detectUnderReplicated
+  // correctly ignores (0 < 0 is false) rather than reporting a phantom under-replication.
+  static PartitionInfo toPartitionInfo(String topic, TopicPartitionInfo tpi) {
     return new PartitionInfo(
       topic,
       tpi.getPartition(),
-      tpi.getLeader().getId(),
-      tpi.getReplicas().stream().map(node -> node.getId()).collect(Collectors.toList()),
-      tpi.getIsr().stream().map(node -> node.getId()).collect(Collectors.toList())
+      tpi.getLeader() != null ? tpi.getLeader().getId() : -1,
+      nodeIds(tpi.getReplicas()),
+      nodeIds(tpi.getIsr())
     );
+  }
+
+  private static List<Integer> nodeIds(List<io.vertx.kafka.client.common.Node> nodes) {
+    if (nodes == null) {
+      return List.of();
+    }
+    return nodes.stream().map(node -> node.getId()).collect(Collectors.toList());
   }
 }
