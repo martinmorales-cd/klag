@@ -19,7 +19,7 @@ import io.github.themoah.klag.metrics.MicrometerReporter;
 import io.github.themoah.klag.metrics.PrometheusHandler;
 import io.github.themoah.klag.metrics.hotpartition.HotPartitionConfig;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;

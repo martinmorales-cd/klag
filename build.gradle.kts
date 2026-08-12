@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.themoah"
-version = "0.2.13"
+version = "0.2.14"
 
 repositories {
   mavenCentral()
@@ -31,7 +31,7 @@ configurations {
 
 val vertxVersion = "4.5.30"
 val junitJupiterVersion = "5.9.1"
-val micrometerVersion = "1.12.0"
+val micrometerVersion = "1.16.6"
 
 val mainVerticleName = "io.github.themoah.klag.MainVerticle"
 val launcherClassName = "io.github.themoah.klag.KlagLauncher"
@@ -45,7 +45,6 @@ application {
 
 dependencies {
   implementation(platform("io.vertx:vertx-stack-depchain:$vertxVersion"))
-  implementation("io.vertx:vertx-micrometer-metrics")
   implementation("io.vertx:vertx-kafka-client")
   implementation("io.vertx:vertx-web")
   implementation("org.slf4j:slf4j-api:2.0.9")
@@ -65,6 +64,10 @@ dependencies {
     // kafka-clients — JNI XXHash JVM crash on invalid byte-array ranges.
     implementation("at.yawk.lz4:lz4-java:1.11.1") {
       because("CVE-2026-59949")
+    }
+    // vertx-stack-depchain BOM pins micrometer-core to the EOL 1.12.x line.
+    implementation("io.micrometer:micrometer-core:$micrometerVersion") {
+      because("CVE-2026-40984")
     }
   }
 
@@ -115,6 +118,10 @@ tasks.withType<JavaExec> {
 }
 
 tasks.withType<ProcessResources> {
+  // expand() values are not tracked as task inputs, so an incremental build would
+  // otherwise keep stamping the previous version into version.properties (/version).
+  inputs.property("projectVersion", version)
+  inputs.property("vertxVersion", vertxVersion)
   filesMatching("version.properties") {
     expand(
       "vertxVersion" to vertxVersion,

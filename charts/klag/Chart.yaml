@@ -2,8 +2,8 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.8
-appVersion: "0.2.13"
+version: 0.3.9
+appVersion: "0.2.14"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
 sources:
@@ -34,6 +34,10 @@ annotations:
     - name: themoah
       email: aviv@dozorets.com
   artifacthub.io/changes: |
+    - kind: security
+      description: Upgrade Micrometer to 1.16.6 (CVE-2026-40984 in micrometer-core; the 1.12 line is EOL and unpatched), which moves the Prometheus registry onto the Prometheus Java client 1.x and drops the EOL io.prometheus:simpleclient jars; scraped metric names, labels and values are unchanged
+    - kind: changed
+      description: Drop the unused vertx-micrometer-metrics dependency
     - kind: fixed
       description: A topic deleted while a group still has committed offsets for it no longer keeps every cycle partial (which froze stale-series cleanup for up to offsets.retention.minutes); such topics are filtered out and their series retired
     - kind: fixed
