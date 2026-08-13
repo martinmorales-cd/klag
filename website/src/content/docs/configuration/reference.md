@@ -23,7 +23,7 @@ resolve in this order: environment variable `NAME` → `-DNAME` → dotted
 - `METRICS_INTERVAL_MS`, `CONSUMER_MEMBER_LABELS_ENABLED`,
   `LAG_TREND_DEADBAND_MSG_PER_SEC`
 - all `HOT_PARTITION_*` and `TIME_LAG_*` settings listed below
-- `COMMIT_FRESHNESS_ENABLED`, `ISR_ENABLED`
+- `COMMIT_FRESHNESS_ENABLED`, `ISR_ENABLED`, `DATA_SKEW_ENABLED`, `DATA_SKEW_MIN_PARTITIONS`
 
 Kafka forwarding, `KLAG_CONFIG_FILE`, Vert.x, reporter integrations, and MCP read
 environment variables directly and do not use that `-D` resolution chain. Logging is a
@@ -72,6 +72,8 @@ For SASL/SSL, common settings include `KAFKA_SECURITY_PROTOCOL`,
 | `LAG_TREND_DEADBAND_MSG_PER_SEC` | `1.0` | STABLE band for the MCP lag-trend classifier. |
 | `COMMIT_FRESHNESS_ENABLED` | `true` | Track inferred time since a lagging group/topic's committed-offset sum last changed. |
 | `ISR_ENABLED` | `true` | Detect and report under-replicated partitions. |
+| `DATA_SKEW_ENABLED` | `false` | Score retained-size imbalance across a topic's partitions (`klag.topic.size_skew`). Opt-in. |
+| `DATA_SKEW_MIN_PARTITIONS` | `2` | Min partitions per topic before a size-skew score is emitted. |
 
 A group is monitored **iff** it matches any include segment **and** no exclude segment.
 See [Group Filtering](/configuration/group-filtering/).
@@ -81,8 +83,9 @@ partitions. Any change, including a rewind, resets its clock. Caught-up periods 
 the tracking baseline; it is established again when lag resumes. Restarting Klag also
 resets observation.
 
-See [Metrics Overview](/metrics/overview/) for commit-staleness semantics and
-[ISR Monitoring](/metrics/isr/) for the under-replicated-partition metric.
+See [Metrics Overview](/metrics/overview/) for commit-staleness semantics,
+[ISR Monitoring](/metrics/isr/) for the under-replicated-partition metric, and
+[Topic Data Skew](/metrics/data-skew/) for the opt-in size-skew score.
 
 ## Hot partition detection
 

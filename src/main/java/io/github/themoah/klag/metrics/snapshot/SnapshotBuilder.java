@@ -15,6 +15,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.TopicSizeSkew;
 import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.ArrayList;
 import java.util.List;
@@ -117,11 +118,11 @@ public final class SnapshotBuilder {
   ) {
     return build(timestampMs, lagData, stateData, velocities, lagMsData, timeToClose,
       retentionRisks, hotByLag, hotByThroughput, transitionsByGroup, lagTrendDeadband,
-      stalenessByGroup, List.of());
+      stalenessByGroup, List.of(), List.of());
   }
 
   /**
-   * Builds a snapshot including under-replicated partition (ISR) data. See the 12-argument
+   * Builds a snapshot including under-replicated partition (ISR) data. See the 14-argument
    * overload for the shared parameters.
    *
    * @param underReplicatedPartitions topic-level under-replicated partitions detected this cycle
@@ -144,6 +145,35 @@ public final class SnapshotBuilder {
     Map<String, Long> stalenessByGroup,
     List<UnderReplicatedPartition> underReplicatedPartitions
   ) {
+    return build(timestampMs, lagData, stateData, velocities, lagMsData, timeToClose,
+      retentionRisks, hotByLag, hotByThroughput, transitionsByGroup, lagTrendDeadband,
+      stalenessByGroup, underReplicatedPartitions, List.of());
+  }
+
+  /**
+   * Builds a snapshot including topic size-skew scores. See the 13-argument overload for
+   * the shared parameters.
+   *
+   * @param sizeSkews topic-level retained-size skew scores (no consumer dimension);
+   *        denormalized per group by matching against each group's consumed topics
+   * @return the assembled snapshot
+   */
+  public static MetricsSnapshot build(
+    long timestampMs,
+    List<ConsumerGroupLag> lagData,
+    Map<String, ConsumerGroupState> stateData,
+    List<LagVelocity> velocities,
+    List<LagMs> lagMsData,
+    List<TimeToCloseEstimate> timeToClose,
+    List<RetentionRisk> retentionRisks,
+    List<HotPartitionLag> hotByLag,
+    List<HotPartitionThroughput> hotByThroughput,
+    Map<String, List<StateTransition>> transitionsByGroup,
+    double lagTrendDeadband,
+    Map<String, Long> stalenessByGroup,
+    List<UnderReplicatedPartition> underReplicatedPartitions,
+    List<TopicSizeSkew> sizeSkews
+  ) {
     Map<String, List<LagVelocity>> velByGroup = groupBy(velocities, LagVelocity::consumerGroup);
     Map<String, List<LagMs>> lagMsByGroup = groupBy(lagMsData, LagMs::consumerGroup);
     Map<String, List<TimeToCloseEstimate>> ttcByGroup = groupBy(timeToClose, TimeToCloseEstimate::consumerGroup);
@@ -151,6 +181,8 @@ public final class SnapshotBuilder {
     Map<String, List<HotPartitionLag>> hotByGroup = groupBy(hotByLag, HotPartitionLag::consumerGroup);
     Map<String, UnderReplicatedPartition> underReplicatedByKey = underReplicatedPartitions.stream()
       .collect(Collectors.toMap(u -> tpKey(u.topic(), u.partition()), u -> u, (a, b) -> a));
+    Map<String, TopicSizeSkew> sizeSkewByTopic = sizeSkews.stream()
+      .collect(Collectors.toMap(TopicSizeSkew::topic, s -> s, (a, b) -> a));
 
     List<GroupSnapshot> groups = new ArrayList<>(lagData.size());
     for (ConsumerGroupLag lag : lagData) {
@@ -162,6 +194,11 @@ public final class SnapshotBuilder {
       List<UnderReplicatedPartition> groupUnderReplicated = lag.partitions().stream()
         .map(p -> underReplicatedByKey.get(tpKey(p.topic(), p.partition())))
         .filter(Objects::nonNull)
+        .toList();
+      List<TopicSizeSkew> groupSizeSkews = lag.partitions().stream()
+        .map(p -> sizeSkewByTopic.get(p.topic()))
+        .filter(Objects::nonNull)
+        .distinct()
         .toList();
       groups.add(new GroupSnapshot(
         group,
@@ -179,7 +216,8 @@ public final class SnapshotBuilder {
         trends,
         overallTrend,
         stalenessByGroup.getOrDefault(group, -1L),
-        groupUnderReplicated
+        groupUnderReplicated,
+        groupSizeSkews
       ));
     }
 

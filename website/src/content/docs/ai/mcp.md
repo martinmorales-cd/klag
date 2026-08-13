@@ -84,6 +84,7 @@ When no check produces a finding, it returns one `OK` finding.
 | Growing lag | Positive topic velocity while total group lag is above zero is `WARNING`. |
 | Catching up | Negative velocity while total group lag is above 100 messages is `INFO`; the detail includes time-to-close when available. |
 | Hot partition | Each lag outlier in `hotPartitionsByLag` is `WARNING`. |
+| Size skew | Each consumed topic with retained-size max/mean ≥ 2.0 is `WARNING` (requires `DATA_SKEW_ENABLED`). |
 | Stuck consumer | Total lag above zero plus `commitStalenessSeconds >= 300` is `WARNING`. |
 
 The stuck-consumer threshold is fixed at five minutes for `diagnose`. Alert on

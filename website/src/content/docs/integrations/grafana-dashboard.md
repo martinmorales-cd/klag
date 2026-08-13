@@ -1,6 +1,6 @@
 ---
 title: Grafana Dashboard
-description: Import Klag's pre-built Grafana dashboard for consumer lag, velocity, hot partitions, time-based lag, data-loss prevention, and JVM panels.
+description: Import Klag's pre-built Grafana dashboard for consumer lag, velocity, hot partitions, time-based lag, data-loss prevention, topic size skew, and JVM panels.
 ---
 
 Klag ships a comprehensive, pre-built Grafana dashboard. It's published on
@@ -34,6 +34,7 @@ Pick either path:
 - **Consumer Group Health**: state table with alerts for unhealthy states.
 - **Partition & Offset Details**: topic throughput and per-partition lag.
 - **Hot Partition Detection**: count, table, and time series.
+- **Topic Data Skew**: max size-skew ratio, per-topic table/time series, and retained messages by partition (requires `DATA_SKEW_ENABLED=true`).
 - **Under-Replicated Partitions (ISR)**: count, table, and time series.
 - **Time-Based Lag**: max time lag, groups catching up, time-to-close charts.
 - **Commit Staleness**: time since Klag last observed each lagging group and topic

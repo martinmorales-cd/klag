@@ -41,3 +41,6 @@ Detection only runs when there is enough data to be meaningful:
 A hot partition usually points at a partitioning-key problem in the producer. Use the
 [Grafana dashboard](/integrations/grafana-dashboard/) hot-partition panels to spot which
 `topic`/`partition` is skewed, then rebalance the key or repartition the topic.
+
+For **stored-size** imbalance (not produce rate), see [Topic Data Skew](/metrics/data-skew/)
+(`DATA_SKEW_ENABLED`).

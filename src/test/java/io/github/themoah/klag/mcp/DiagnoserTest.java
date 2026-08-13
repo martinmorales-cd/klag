@@ -15,6 +15,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.TopicSizeSkew;
 import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.List;
 import java.util.Locale;
@@ -239,5 +240,28 @@ class DiagnoserTest {
 
     assertEquals(Severity.CRITICAL, d.overall());
     assertTrue(hasFindingContaining(d, "no in-sync replicas"));
+  }
+
+  private static GroupSnapshot groupWithSizeSkew(double ratio) {
+    PartitionLag p = PartitionLag.of("orders", 0, 1000, 0, 0, 0, 1000);
+    return new GroupSnapshot("payments", State.STABLE, 0, 0, 0,
+      List.of(p), List.of(), List.of(), List.of(), List.of(), List.of(),
+      List.of(), List.of(), Direction.STABLE, -1, List.of(),
+      List.of(new TopicSizeSkew("orders", ratio)));
+  }
+
+  @Test
+  void sizeSkewAtTwoWarns() {
+    Diagnosis d = Diagnoser.diagnose(groupWithSizeSkew(2.0));
+
+    assertEquals(Severity.WARNING, d.overall());
+    assertTrue(hasFindingContaining(d, "size skew"));
+  }
+
+  @Test
+  void sizeSkewBelowTwoIsSilent() {
+    Diagnosis d = Diagnoser.diagnose(groupWithSizeSkew(1.5));
+
+    assertEquals(Severity.OK, d.overall());
   }
 }

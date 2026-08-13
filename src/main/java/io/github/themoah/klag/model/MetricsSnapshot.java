@@ -43,6 +43,8 @@ public record MetricsSnapshot(
    *        offset (across topics with lag &gt; 0); -1 when no lagging topic or freshness disabled
    * @param underReplicatedPartitions under-replicated partitions this group consumes (topic-level,
    *        identical across groups sharing the topic)
+   * @param sizeSkews retained-size skew scores for topics this group consumes (topic-level;
+   *        empty when {@code DATA_SKEW_ENABLED} is off)
    */
   public record GroupSnapshot(
     String consumerGroup,
@@ -60,7 +62,8 @@ public record MetricsSnapshot(
     List<LagTrend> trends,
     Direction overallTrend,
     long maxCommitStalenessSeconds,
-    List<UnderReplicatedPartition> underReplicatedPartitions
+    List<UnderReplicatedPartition> underReplicatedPartitions,
+    List<TopicSizeSkew> sizeSkews
   ) {
 
     /**
@@ -132,6 +135,33 @@ public record MetricsSnapshot(
       this(consumerGroup, state, totalLag, maxLag, minLag, partitions, velocities, lagMs,
         timeToClose, retentionRisks, hotPartitionsByLag, recentTransitions, trends, overallTrend,
         maxCommitStalenessSeconds, List.of());
+    }
+
+    /**
+     * Backward-compatible constructor defaulting size-skew scores to empty.
+     * Used by tests and callers that do not supply data-skew data.
+     */
+    public GroupSnapshot(
+      String consumerGroup,
+      State state,
+      long totalLag,
+      long maxLag,
+      long minLag,
+      List<PartitionLag> partitions,
+      List<LagVelocity> velocities,
+      List<LagMs> lagMs,
+      List<TimeToCloseEstimate> timeToClose,
+      List<RetentionRisk> retentionRisks,
+      List<HotPartitionLag> hotPartitionsByLag,
+      List<StateTransition> recentTransitions,
+      List<LagTrend> trends,
+      Direction overallTrend,
+      long maxCommitStalenessSeconds,
+      List<UnderReplicatedPartition> underReplicatedPartitions
+    ) {
+      this(consumerGroup, state, totalLag, maxLag, minLag, partitions, velocities, lagMs,
+        timeToClose, retentionRisks, hotPartitionsByLag, recentTransitions, trends, overallTrend,
+        maxCommitStalenessSeconds, underReplicatedPartitions, List.of());
     }
   }
 

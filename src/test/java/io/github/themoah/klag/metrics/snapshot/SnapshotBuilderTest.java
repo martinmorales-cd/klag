@@ -17,6 +17,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.TopicSizeSkew;
 import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.List;
 import java.util.Map;
@@ -136,5 +137,20 @@ class SnapshotBuilderTest {
 
     assertEquals(List.of(ur), snap.group("payments").orElseThrow().underReplicatedPartitions());
     assertTrue(snap.group("other").orElseThrow().underReplicatedPartitions().isEmpty());
+  }
+
+  @Test
+  void filtersSizeSkewToConsumingGroupsOnly() {
+    TopicSizeSkew orders = new TopicSizeSkew("orders", 2.0);
+    TopicSizeSkew misc = new TopicSizeSkew("misc", 1.0);
+
+    MetricsSnapshot snap = SnapshotBuilder.build(
+      1L,
+      List.of(groupLag("payments", "orders", 0, 100, 40), groupLag("other", "misc", 0, 10, 10)),
+      Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+      Map.of(), 1.0, Map.of(), List.of(), List.of(orders, misc));
+
+    assertEquals(List.of(orders), snap.group("payments").orElseThrow().sizeSkews());
+    assertEquals(List.of(misc), snap.group("other").orElseThrow().sizeSkews());
   }
 }

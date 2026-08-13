@@ -102,6 +102,7 @@ export default defineConfig({
             { label: 'Hot Partitions', slug: 'metrics/hot-partitions' },
             { label: 'Data Loss Prevention', slug: 'metrics/data-loss-prevention' },
             { label: 'ISR Monitoring', slug: 'metrics/isr' },
+            { label: 'Topic Data Skew', slug: 'metrics/data-skew' },
           ],
         },
         {

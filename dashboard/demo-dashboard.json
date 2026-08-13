@@ -21,7 +21,7 @@
     }
   ],
   "cursorSync": "Crosshair",
-  "description": "Comprehensive Kafka consumer lag and health monitoring for Klag (https://github.com/themoah/klag). Lag, velocity, hot partitions, time-based lag, data-loss-prevention and JVM runtime metrics. Requires a Prometheus-compatible data source.",
+  "description": "Comprehensive Kafka consumer lag and health monitoring for Klag (https://github.com/themoah/klag). Lag, velocity, hot partitions, time-based lag, data-loss-prevention, topic size skew and JVM runtime metrics. Requires a Prometheus-compatible data source.",
   "editable": true,
   "elements": {
     "panel-1": {
@@ -4104,6 +4104,466 @@
           "version": "13.1.0-26564065169"
         }
       }
+    },
+    "panel-38": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "${datasource}"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "max(klag_topic_size_skew{topic=~\"$topic\"}) / 100 or vector(0)",
+                      "legendFormat": "Max size skew",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "max/mean retained-size ratio. 1.0 = even; 2.0 = hottest partition holds 2\u00d7 the average. Requires DATA_SKEW_ENABLED=true.",
+        "id": 38,
+        "links": [],
+        "title": "Max Topic Size Skew",
+        "vizConfig": {
+          "group": "stat",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1.5
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                },
+                "unit": "none",
+                "decimals": 2
+              },
+              "overrides": []
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "values": false,
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": ""
+              },
+              "textMode": "auto"
+            }
+          },
+          "version": "13.1.0-26564065169"
+        }
+      }
+    },
+    "panel-39": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "${datasource}"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "klag_topic_size_skew{topic=~\"$topic\"} / 100",
+                      "legendFormat": "__auto",
+                      "instant": true,
+                      "format": "table"
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": [
+              {
+                "group": "organize",
+                "kind": "Transformation",
+                "spec": {
+                  "options": {
+                    "excludeByName": {
+                      "Time": true,
+                      "job": true,
+                      "service_name": true
+                    },
+                    "indexByName": {
+                      "Time": 0,
+                      "topic": 1,
+                      "Value": 2
+                    },
+                    "renameByName": {
+                      "topic": "Topic",
+                      "Value": "Size skew"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "description": "Retained-size skew per topic (max/mean). Empty until DATA_SKEW_ENABLED=true.",
+        "id": 39,
+        "links": [],
+        "title": "Topic Size Skew",
+        "vizConfig": {
+          "group": "table",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "left",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "inspect": false
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1.5
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                },
+                "decimals": 2
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Size skew"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "mode": "basic",
+                        "type": "color-background"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "Size skew"
+                }
+              ]
+            }
+          },
+          "version": "13.1.0-26564065169"
+        }
+      }
+    },
+    "panel-40": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "${datasource}"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "klag_topic_size_skew{topic=~\"$topic\"} / 100",
+                      "legendFormat": "{{topic}}",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "max/mean retained-size ratio per topic. Gauge is stored \u00d7100; this panel divides by 100. Requires DATA_SKEW_ENABLED=true.",
+        "id": 40,
+        "links": [],
+        "title": "Topic Size Skew Over Time",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "max/mean ratio",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "tooltip": false,
+                    "viz": false,
+                    "legend": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1.5
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                },
+                "unit": "none",
+                "decimals": 2
+              },
+              "overrides": []
+            },
+            "options": {
+              "legend": {
+                "calcs": [
+                  "last",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            }
+          },
+          "version": "13.1.0-26564065169"
+        }
+      }
+    },
+    "panel-41": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "${datasource}"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "max by (topic, partition) (klag_partition_log_end_offset{consumer_group=~\"$consumer_group\", topic=~\"$topic\"} - klag_partition_log_start_offset{consumer_group=~\"$consumer_group\", topic=~\"$topic\"})",
+                      "legendFormat": "{{topic}} [{{partition}}]",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "logEndOffset \u2212 logStartOffset from existing partition gauges. Use this to see which partition is fat when size skew is high.",
+        "id": 41,
+        "links": [],
+        "title": "Retained Messages by Partition",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "retained messages",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "tooltip": false,
+                    "viz": false,
+                    "legend": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1.5
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                },
+                "unit": "short",
+                "decimals": 0
+              },
+              "overrides": []
+            },
+            "options": {
+              "legend": {
+                "calcs": [
+                  "last",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            }
+          },
+          "version": "13.1.0-26564065169"
+        }
+      }
     }
   },
   "layout": {
@@ -4543,6 +5003,72 @@
               }
             },
             "title": "Under-Replicated Partitions (ISR)"
+          }
+        },
+        {
+          "kind": "RowsLayoutRow",
+          "spec": {
+            "collapse": false,
+            "layout": {
+              "kind": "GridLayout",
+              "spec": {
+                "items": [
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-38"
+                      },
+                      "height": 4,
+                      "width": 6,
+                      "x": 0,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-39"
+                      },
+                      "height": 8,
+                      "width": 18,
+                      "x": 6,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-40"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 0,
+                      "y": 8
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-41"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 12,
+                      "y": 8
+                    }
+                  }
+                ]
+              }
+            },
+            "title": "Topic Data Skew"
           }
         },
         {

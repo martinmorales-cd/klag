@@ -12,6 +12,7 @@ import io.github.themoah.klag.model.LagVelocity;
 import io.github.themoah.klag.model.MemberAssignment;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.TopicSizeSkew;
 import io.github.themoah.klag.model.UnderReplicatedPartition;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
@@ -311,6 +312,23 @@ public class MicrometerReporter {
 
       long missingReplicas = u.replicaCount() - u.inSyncReplicaCount();
       trackKey(activeKeys, recordGauge("klag.partition.under_replicated", tags, missingReplicas));
+    }
+  }
+
+  /**
+   * Reports topic-level retained-size skew ({@code max/mean} of logEnd−logStart, scaled ×100).
+   * Tags are {@code topic} only.
+   *
+   * @param skews list of topic size-skew scores
+   * @param activeKeys set to populate with active gauge keys (can be null)
+   */
+  public void reportTopicSizeSkew(List<TopicSizeSkew> skews, Set<String> activeKeys) {
+    log.debug("Reporting {} topic size-skew metrics", skews.size());
+
+    for (TopicSizeSkew skew : skews) {
+      Tags tags = Tags.of("topic", skew.topic());
+      long scaled = Math.round(skew.ratio() * 100);
+      trackKey(activeKeys, recordGauge("klag.topic.size_skew", tags, scaled));
     }
   }
 
