@@ -4472,7 +4472,7 @@
                     "kind": "DataQuery",
                     "spec": {
                       "editorMode": "code",
-                      "expr": "max by (topic, partition) (klag_partition_log_end_offset{consumer_group=~\"$consumer_group\", topic=~\"$topic\"} - klag_partition_log_start_offset{consumer_group=~\"$consumer_group\", topic=~\"$topic\"})",
+                      "expr": "max by (topic, partition) (klag_partition_log_end_offset{topic=~\"$topic\"} - klag_partition_log_start_offset{topic=~\"$topic\"})",
                       "legendFormat": "{{topic}} [{{partition}}]",
                       "range": true
                     },
