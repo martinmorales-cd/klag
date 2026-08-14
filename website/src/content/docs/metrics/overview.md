@@ -73,7 +73,7 @@ Opt-in via `DATA_SKEW_ENABLED` (default `false`). See [Topic Data Skew](/metrics
 
 | Metric | Description |
 |---|---|
-| `klag.topic.size_skew` | `max/mean` retained-size ratio × 100 (`retained = logEndOffset − logStartOffset`). Tags: `topic` only. 100 = even; 200 = hottest partition holds 2× the average. |
+| `klag.topic.size_skew` | `max/mean` retained-size ratio × 100 (`retained = max(0, logEndOffset − logStartOffset)`). Tags: `topic` only. 100 = even; 200 = fullest partition holds 2× the average. |
 
 ## Time-based lag
 

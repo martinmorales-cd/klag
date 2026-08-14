@@ -885,7 +885,7 @@ public class MetricsCollector {
     for (String topic : topics) {
       Future<List<PartitionOffsets>> future = cycleTopicOffsets.get(topic);
       if (future == null || !future.succeeded()) {
-        log.warn("Skipping size-skew check for topic {}: offset metadata unavailable this cycle", topic);
+        log.debug("Skipping size-skew check for topic {}: offset metadata unavailable this cycle", topic);
         continue;
       }
       offsets.addAll(future.result());

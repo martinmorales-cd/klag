@@ -1,11 +1,14 @@
 package io.github.themoah.klag.metrics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.themoah.klag.model.TopicSizeSkew;
 import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.HashSet;
 import java.util.List;
@@ -17,6 +20,10 @@ import org.junit.jupiter.api.Test;
  * (no consumer_group or partition), and two-phase stale-gauge cleanup retires deleted topics.
  */
 class MicrometerReporterTopicSizeSkewTest {
+
+  private static boolean hasTag(Meter meter, String key) {
+    return meter.getId().getTags().stream().anyMatch(tag -> tag.getKey().equals(key));
+  }
 
   @Test
   void reportsGaugeScaledBy100() {
@@ -37,11 +44,13 @@ class MicrometerReporterTopicSizeSkewTest {
 
     reporter.reportTopicSizeSkew(List.of(new TopicSizeSkew("orders", 1.0)), null);
 
-    assertNull(registry.find("klag.topic.size_skew").tag("consumer_group", "").gauge(),
+    Gauge gauge = registry.find("klag.topic.size_skew").tag("topic", "orders").gauge();
+    assertNotNull(gauge);
+    assertTrue(hasTag(gauge, "topic"));
+    assertFalse(hasTag(gauge, "consumer_group"),
       "size-skew is topic-level, must not carry a consumer_group tag");
-    assertNull(registry.find("klag.topic.size_skew").tag("partition", "0").gauge(),
+    assertFalse(hasTag(gauge, "partition"),
       "size-skew is topic-level, must not carry a partition tag");
-    assertNotNull(registry.find("klag.topic.size_skew").tag("topic", "orders").gauge());
   }
 
   @Test

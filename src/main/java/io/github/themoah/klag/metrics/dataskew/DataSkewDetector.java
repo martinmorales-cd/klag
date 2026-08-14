@@ -47,15 +47,15 @@ public final class DataSkewDetector {
 
   private static double ratio(List<Long> sizes) {
     long max = 0L;
-    long sum = 0L;
+    double sum = 0.0;
     for (long size : sizes) {
       max = Math.max(max, size);
       sum += size;
     }
-    if (sum == 0L) {
+    if (sum == 0.0) {
       return 1.0;
     }
-    double mean = sum / (double) sizes.size();
+    double mean = sum / sizes.size();
     return max / mean;
   }
 }

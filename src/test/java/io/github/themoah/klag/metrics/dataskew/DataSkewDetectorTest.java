@@ -91,4 +91,15 @@ class DataSkewDetectorTest {
     assertEquals(1, result.size());
     assertEquals(2.0, result.get(0).ratio(), 1e-9);
   }
+
+  @Test
+  void retainedTotalBeyondLongMax_doesNotOverflow() {
+    List<TopicSizeSkew> result = DataSkewDetector.detect(List.of(
+      offsets("orders", 0, Long.MAX_VALUE, 0),
+      offsets("orders", 1, Long.MAX_VALUE, 0)
+    ), MIN_PARTITIONS);
+
+    assertEquals(1, result.size());
+    assertEquals(1.0, result.get(0).ratio(), 1e-9);
+  }
 }

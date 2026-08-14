@@ -57,8 +57,8 @@ public final class Diagnoser {
   // The raw klag.consumer.commit.staleness_seconds gauge supports alerting at any threshold.
   private static final long STUCK_STALENESS_SECONDS = 300;
   // Size-skew max/mean ratio at/above which a consumed topic is flagged. Alert on
-  // klag.topic.size_skew at any threshold; diagnose uses 1.5 (hottest partition holds 50% above mean).
-  private static final double SIZE_SKEW_WARN_RATIO = 1.5;
+  // klag.topic.size_skew at any threshold; diagnose uses 2.0 (fullest partition holds 2x the mean).
+  private static final double SIZE_SKEW_WARN_RATIO = 2.0;
 
   /**
    * Diagnoses a consumer group.
@@ -205,7 +205,7 @@ public final class Diagnoser {
       if (skew.ratio() >= SIZE_SKEW_WARN_RATIO) {
         findings.add(new Finding(Severity.WARNING, "Size skew on " + skew.topic(),
           String.format(Locale.ROOT,
-            "Topic %s has retained-size skew %.2f (hottest partition holds %.2f× the average). "
+            "Topic %s has retained-size skew %.2f (fullest partition holds %.2f× the average). "
             + "Uneven partition keys, compaction, or idle partitions leave some partitions much "
             + "fuller than others.", skew.topic(), skew.ratio(), skew.ratio())));
       }

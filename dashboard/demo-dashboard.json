@@ -4529,14 +4529,6 @@
                     {
                       "color": "green",
                       "value": 0
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 1.5
-                    },
-                    {
-                      "color": "red",
-                      "value": 2
                     }
                   ]
                 },

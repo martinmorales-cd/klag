@@ -32,6 +32,10 @@ public record DataSkewConfig(
   public static DataSkewConfig fromEnvironment() {
     boolean enabled = Env.getBool("DATA_SKEW_ENABLED", DEFAULT_ENABLED);
     int minPartitions = Env.getInt("DATA_SKEW_MIN_PARTITIONS", DEFAULT_MIN_PARTITIONS);
+    if (minPartitions < 1) {
+      log.warn("DATA_SKEW_MIN_PARTITIONS must be >= 1, using default: {}", DEFAULT_MIN_PARTITIONS);
+      minPartitions = DEFAULT_MIN_PARTITIONS;
+    }
     DataSkewConfig config = new DataSkewConfig(enabled, minPartitions);
     log.info("Data skew config: enabled={}, minPartitions={}", enabled, minPartitions);
     return config;
