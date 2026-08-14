@@ -1,4 +1,10 @@
 {
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "klag"
+  },
+  "spec": {
   "annotations": [
     {
       "kind": "AnnotationQuery",
@@ -5344,4 +5350,5 @@
       }
     }
   ]
+}
 }
