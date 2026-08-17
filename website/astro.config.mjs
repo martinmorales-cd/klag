@@ -44,6 +44,7 @@ export default defineConfig({
   // Short links for the README and external references.
   redirects: {
     '/migration': '/getting-started/migrating-from-kafka-lag-exporter/',
+    '/agent-setup': '/ai/agent-setup/',
     '/getting-started/comparison': '/comparisons/overview/',
     '/comparisons': '/comparisons/overview/',
     '/comparisons/': '/comparisons/overview/',
@@ -132,6 +133,7 @@ export default defineConfig({
         {
           label: 'AI Agents',
           items: [
+            { label: 'Agent Setup', slug: 'ai/agent-setup' },
             { label: 'MCP Endpoint', slug: 'ai/mcp' },
           ],
         },
