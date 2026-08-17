@@ -184,8 +184,12 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.klag]
 url = "https://klag.example.com/mcp"
-http_headers = { Authorization = "Bearer <token>" }
+bearer_token_env_var = "KLAG_MCP_TOKEN"
 ```
+
+`bearer_token_env_var` names the environment variable that holds the token, so it is never
+written to `config.toml` — export it before launching Codex. The inline form
+`http_headers = { Authorization = "Bearer <token>" }` works too, but stores the token on disk.
 
 Older Codex builds only spoke stdio and needed the `mcp-remote` bridge
 (`command = "npx"`, `args = ["mcp-remote", "https://klag.example.com/mcp"]`). Check your

@@ -50,8 +50,13 @@ shopt -s nullglob
 files=(plugin/commands/*.md plugin/skills/klag/SKILL.md)
 [ ${#files[@]} -gt 1 ] || err "no plugin/commands/*.md found"
 for f in "${files[@]}"; do
-  head -1 "$f" | grep -qx -- '---' || err "$f: missing YAML frontmatter"
-  grep -qE '^(description|name):' "$f" || err "$f: frontmatter has no description"
+  # Only look between the opening and closing --- : a `description:` in the body does not count.
+  awk '
+    NR == 1 { if ($0 != "---") exit 1; next }
+    /^---[[:space:]]*$/ { closed = 1; exit }
+    /^description:[[:space:]]*[^[:space:]]/ { found = 1 }
+    END { exit (closed && found) ? 0 : 1 }
+  ' "$f" || err "$f: frontmatter missing or has no non-empty description:"
 done
 
 # Referenced reference files must exist (a dangling ${CLAUDE_PLUGIN_ROOT} path is a silent no-op).

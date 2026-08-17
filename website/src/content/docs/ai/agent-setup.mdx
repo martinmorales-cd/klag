@@ -85,8 +85,13 @@ Connect a running Klag over MCP by adding it to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.klag]
 url = "https://klag.example.com/mcp"
-http_headers = { Authorization = "Bearer <token>" }
+bearer_token_env_var = "KLAG_MCP_TOKEN"
 ```
+
+`bearer_token_env_var` names the environment variable holding the token, so the value never
+lands in `config.toml`. Export it (same value as Klag's `MCP_AUTH_TOKEN`) before launching
+Codex. A literal `http_headers = { Authorization = "Bearer <token>" }` also works, at the cost
+of storing the token on disk.
 
   </TabItem>
   <TabItem label="GitHub Copilot">

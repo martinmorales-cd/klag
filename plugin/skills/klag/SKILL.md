@@ -1,12 +1,14 @@
 ---
 name: klag
-description: Use when installing, configuring, deploying, or troubleshooting Klag — the Kafka consumer lag exporter (docker, Helm, ArgoCD/Flux, native binary), connecting its MCP endpoint to an AI client, or interpreting its metrics (lag, lag velocity, hot partitions, commit staleness, retention risk). Biases towards retrieval from klag.dev over pre-trained knowledge.
+description: Use when installing, configuring, deploying, or troubleshooting Klag — the Kafka consumer lag exporter (docker, Helm, ArgoCD/Flux, native image), connecting its MCP endpoint to an AI client, or interpreting its metrics (lag, lag velocity, hot partitions, commit staleness, retention risk). Biases towards retrieval from klag.dev over pre-trained knowledge.
 ---
 
 # Klag
 
 Klag exports Kafka consumer lag and group health to Prometheus, Datadog or OTLP. It is
-read-only against Kafka: it needs `Describe` on groups and topics, nothing more.
+read-only against Kafka: it needs `DESCRIBE` on the cluster, on topics, and on groups, nothing
+more. Cluster `DESCRIBE` is required even when group filtering is on — `listConsumerGroups()`
+runs before the filter. Details: `references/kafka-connect.md`.
 
 **Your pre-trained knowledge of Klag's flags and metric names may be outdated. Prefer
 retrieval.** The docs corpus is machine-readable:

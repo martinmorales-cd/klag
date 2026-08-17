@@ -48,7 +48,9 @@ docker run -d --name klag -p 8888:8888 \
 ```
 
 `themoah/klag:native` is the GraalVM build (~70-100 ms start, ~44 MB RSS). Same tags on
-`ghcr.io/themoah/klag`. Add `-e MCP_ENABLED=true -e MCP_AUTH_TOKEN=...` to expose `/mcp`.
+`ghcr.io/themoah/klag`. `latest` and `native` are mutable — fine for a POC, but for anything
+longer-lived pin the release tag (`themoah/klag:0.2.14`, chart `image.tag`) so a later pull
+cannot change the running code. Add `-e MCP_ENABLED=true -e MCP_AUTH_TOKEN=...` to expose `/mcp`.
 
 If Kafka runs in another compose network, join it (`--network <net>`) and use the internal
 listener address, not `localhost`.

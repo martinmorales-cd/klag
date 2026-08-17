@@ -56,7 +56,7 @@ kafka:
 ```
 
 ```bash
-kubectl -n <ns> create secret generic klag-kafka \
+kubectl -n "$NS" create secret generic klag-kafka \
   --from-literal=jaas-config='org.apache.kafka.common.security.plain.PlainLoginModule required username="KEY" password="SECRET";'
 ```
 
@@ -99,8 +99,8 @@ monitored groups consume.
 ## Verifying the connection
 
 ```bash
-curl -s <klag>/readyz            # 200 = Kafka reachable, 503 = not
-curl -s <klag>/metrics | grep -c '^klag_consumer_lag{'
+curl -s "$KLAG_URL/readyz"            # 200 = Kafka reachable, 503 = not
+curl -s "$KLAG_URL/metrics" | grep -c '^klag_consumer_lag{'
 ```
 
 `/readyz` 503 → bad bootstrap, unreachable advertised listeners, wrong protocol, or bad

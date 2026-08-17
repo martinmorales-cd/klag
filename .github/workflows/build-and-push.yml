@@ -42,9 +42,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.plugin == 'true'
+    # The job runs a script from the checked-out ref: read-only token, no persisted credentials.
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Validate Claude Code plugin manifests
         run: ./scripts/check-plugin.sh

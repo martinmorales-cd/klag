@@ -12,7 +12,8 @@ demand. Tools: `list_consumer_groups`, `get_consumer_group_lag`, `find_lagging_g
 
 ## 1. Find the endpoint
 
-If `$ARGUMENTS` has a URL, use it. Otherwise look for a running Klag:
+If `$ARGUMENTS` has a URL, use it. Otherwise look for a running Klag. Export the result as
+`KLAG_URL` (and `NS` for the namespace) so the commands below stay quoted and copy-pasteable:
 
 ```bash
 docker ps --filter ancestor=themoah/klag --format '{{.Names}} {{.Ports}}'
@@ -22,7 +23,7 @@ kubectl get deploy -A -l app.kubernetes.io/name=klag 2>/dev/null
 For a cluster install, start a port-forward (confirm first) and use `http://localhost:18888`:
 
 ```bash
-kubectl -n <ns> port-forward svc/klag 18888:8888
+kubectl -n "$NS" port-forward svc/klag 18888:8888
 ```
 
 A port-forward dies with the shell — tell the user the registration points at a tunnel they
@@ -32,9 +33,9 @@ that URL instead.
 ## 2. Check the prerequisites
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' <url>/readyz
+curl -s -o /dev/null -w '%{http_code}\n' "$KLAG_URL/readyz"
 # Drop the Authorization line when MCP_AUTH_TOKEN is unset — do not send the literal placeholder.
-curl -s -X POST <url>/mcp -H 'Content-Type: application/json' \
+curl -s -X POST "$KLAG_URL/mcp" -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $KLAG_MCP_TOKEN" \
   --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
@@ -44,15 +45,18 @@ curl -s -X POST <url>/mcp -H 'Content-Type: application/json' \
 - `401` → `MCP_AUTH_TOKEN` is set; get the token from the user or read it from the Secret with
   their confirmation. Never print it back.
 - `405` → that was a GET; MCP here is POST only.
-- Empty snapshot → `METRICS_REPORTER` is unset. MCP is populated by the metrics collector, so
-  with no reporter there is nothing to serve.
+- Empty snapshot → the collector has nothing to publish. Check in this order: `METRICS_REPORTER`
+  is set (default `none` means no collection at all), `/metrics` actually has
+  `klag_consumer_lag` series, `METRICS_GROUP_FILTER` / `METRICS_GROUP_EXCLUDE` do not exclude
+  every group, and the cluster really does have groups with committed offsets. Only the first
+  needs a redeploy.
 
 ## 3. Register
 
 Claude Code:
 
 ```bash
-claude mcp add --transport http klag <url>/mcp --header "Authorization: Bearer $KLAG_MCP_TOKEN"
+claude mcp add --transport http klag "$KLAG_URL/mcp" --header "Authorization: Bearer $KLAG_MCP_TOKEN"
 ```
 
 Omit the header if no token is set. Pass the token through a shell variable rather than typing it
@@ -64,10 +68,12 @@ For other clients, print the snippet for whichever the user is on rather than al
 
 - Cursor — `~/.cursor/mcp.json`: `{"mcpServers":{"klag":{"url":"<url>/mcp","headers":{"Authorization":"Bearer <token>"}}}}`
 - Codex — `~/.codex/config.toml`: `[mcp_servers.klag]` with `url` and
-  `http_headers = { Authorization = "Bearer <token>" }`
+  `bearer_token_env_var = "KLAG_MCP_TOKEN"` (keeps the token out of the config file; export the
+  variable before launching Codex). `http_headers = { Authorization = "Bearer <token>" }` also
+  works but persists the token on disk.
 - GitHub Copilot (VS Code) — `.vscode/mcp.json` or user MCP config: top-level `servers.klag`
   with `"type":"http"`, `"url":"<url>/mcp"`, `"headers":{"Authorization":"Bearer <token>"}`
-- GitHub Copilot CLI — `copilot mcp add --transport http --header "Authorization: Bearer $KLAG_MCP_TOKEN" klag <url>/mcp`
+- GitHub Copilot CLI — `copilot mcp add --transport http --header "Authorization: Bearer $KLAG_MCP_TOKEN" klag "$KLAG_URL/mcp"`
   or `~/.copilot/mcp-config.json` with `"type":"http"`
 - OpenCode — `opencode.json`: `mcp.servers.klag` with `"type":"remote"`, `"url":"<url>/mcp"`,
   `"oauth":false`, `"headers":{"Authorization":"Bearer {env:KLAG_MCP_TOKEN}"}`
