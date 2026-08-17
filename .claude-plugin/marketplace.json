@@ -1,0 +1,16 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "klag",
+  "description": "The Klag Kafka consumer lag exporter: install it, connect its MCP endpoint, and triage consumer lag from your agent.",
+  "owner": {
+    "name": "themoah",
+    "url": "https://klag.dev"
+  },
+  "plugins": [
+    {
+      "name": "klag",
+      "source": "./plugin",
+      "description": "Install, connect and diagnose Klag — the Kafka consumer lag exporter."
+    }
+  ]
+}

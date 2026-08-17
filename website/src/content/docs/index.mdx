@@ -11,6 +11,10 @@ hero:
       link: /getting-started/quick-start/
       icon: right-arrow
       variant: primary
+    - text: Set up with your AI agent
+      link: /ai/agent-setup/
+      icon: rocket
+      variant: secondary
     - text: View on GitHub
       link: https://github.com/themoah/klag
       icon: external
@@ -90,6 +94,20 @@ gateway IP directly).
 Metrics land at `http://localhost:8888/metrics`. See the [Quick Start](/getting-started/quick-start/)
 for native image, Helm, and Docker env-file options.
 
+## Or let your agent do it
+
+In Claude Code, add the Klag plugin and run the installer:
+
+```txt
+/plugin marketplace add themoah/klag
+/plugin install klag@klag
+/klag:install
+```
+
+It detects Docker, your kube context, Helm, ArgoCD/Flux and Strimzi, deploys accordingly,
+and verifies that lag metrics actually arrive. Copilot, Codex, Cursor, OpenCode and other
+agents are covered too — see [Agent Setup](/ai/agent-setup/).
+
 ## Ships to your stack
 
 <CardGrid>
@@ -103,7 +121,8 @@ for native image, Helm, and Docker env-file options.
 
 Klag exposes an opt-in, read-only [MCP endpoint](/ai/mcp/) so SRE and dev agents can
 query lag, find lagging groups, and run composite `diagnose` checks, served from an
-in-memory snapshot, never touching your brokers.
+in-memory snapshot, never touching your brokers. Installation and connection are
+agent-driven too — see [Agent Setup](/ai/agent-setup/).
 
 ---
 

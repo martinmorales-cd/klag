@@ -30,6 +30,13 @@ Migrating from kafka-lag-exporter? See the **[migration guide](https://klag.dev/
 > AI agents: a machine-readable corpus is at [klag.dev/llms.txt](https://klag.dev/llms.txt).
 > The docs source lives in [`website/`](website/) (Astro + Starlight).
 
+> ### 🤖 Install with your AI agent
+>
+> In Claude Code: `/plugin marketplace add themoah/klag` → `/plugin install klag@klag` → `/klag:install`.
+> It detects Docker/Kubernetes/ArgoCD/Strimzi, deploys, verifies metrics, and can wire up the MCP
+> endpoint (`/klag:connect`, `/klag:diagnose`). Copilot, Codex, Cursor, OpenCode and others:
+> **[klag.dev/agent-setup](https://klag.dev/agent-setup)**.
+
 > **Scales to large clusters:** Monitors thousands of consumer groups in ~50MB heap. Request batching with configurable delays prevents overwhelming brokers — fetch offsets for 500+ groups without spiking cluster CPU.
 
 ## Why Klag?

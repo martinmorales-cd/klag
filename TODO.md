@@ -26,3 +26,8 @@ In any order:
 Internal tasks:
 * Collect all consts and default values into single AppConfig.
 * Local integration stack with k3s/minicube/docker compose.
+* Shrink the agent-plugin install footprint. `source: "./plugin"` already cut the installed
+  payload from 620 MB (local dir install of the whole repo — node_modules, build/, .env) to
+  36 KB, but a `/plugin marketplace add themoah/klag` still clones the full repo into
+  `~/.claude/plugins/`. Measure it once published; if it is large, look at a shallow/sparse
+  clone, `.gitattributes export-ignore`, or splitting the marketplace into its own repo.

@@ -84,6 +84,21 @@ fixed by ACL or `METRICS_GROUP_EXCLUDE`. The snapshot is exempt so agents don't 
 hours-old data while `/metrics` stays current; an *empty* snapshot is not published, since
 wiping the agent view is worse than a stale one.
 
+## Agent onboarding plugin
+
+The repo doubles as a Claude Code marketplace: `.claude-plugin/marketplace.json` (root) points at
+`./plugin`, which holds `plugin/.claude-plugin/plugin.json`, `plugin/commands/{install,connect,diagnose}.md`
+(→ `/klag:install` etc.) and `plugin/skills/klag/`. Users get it with
+`/plugin marketplace add themoah/klag` + `/plugin install klag@klag`.
+
+The `source: "./plugin"` subdir is deliberate: with `"./"` the plugin root is the repo root, so an
+install copies the entire tree — a local directory install measured 620 MB (`website/node_modules`,
+`build/`, even `.env`), and a GitHub install would clone every tracked file. With `./plugin` the
+installed payload is 36 KB. Keep the skill thin — it fetches
+`klag.dev/llms.txt` rather than duplicating the config reference, so it cannot drift.
+`scripts/check-plugin.sh` pins manifest shape and runs in CI. User-facing page:
+`website/src/content/docs/ai/agent-setup.mdx` (`klag.dev/agent-setup`).
+
 ## HTTP Endpoints
 
 | Endpoint | Purpose |
