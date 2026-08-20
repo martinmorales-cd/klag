@@ -85,6 +85,17 @@ public final class OtlpTls {
    * context; invalid content raises the underlying parse exception.
    */
   static SSLContext buildAdditiveContext(Path pemPath) throws Exception {
+    SSLContext ctx = SSLContext.getInstance("TLS");
+    ctx.init(null, new TrustManager[] {buildAdditiveTrustManager(pemPath)}, null);
+    return ctx;
+  }
+
+  /**
+   * Builds the additive trust manager that backs {@link #buildAdditiveContext}: the JDK
+   * default CAs combined with the X.509 certificates in {@code pemPath}. Its accepted
+   * issuers are always a superset of the JDK defaults. Package-private for tests.
+   */
+  static X509TrustManager buildAdditiveTrustManager(Path pemPath) throws Exception {
     List<X509Certificate> extras = new ArrayList<>();
     if (Files.size(pemPath) > 0) {
       try (InputStream in = Files.newInputStream(pemPath)) {
@@ -102,10 +113,7 @@ public final class OtlpTls {
     } else {
       managers.add(trustManagerFor(extras));
     }
-
-    SSLContext ctx = SSLContext.getInstance("TLS");
-    ctx.init(null, new TrustManager[] {new CompositeX509TrustManager(managers)}, null);
-    return ctx;
+    return new CompositeX509TrustManager(managers);
   }
 
   /** Returns an {@link HttpSender} backed by the JDK HttpClient using {@code sslContext}. */
@@ -211,6 +219,9 @@ public final class OtlpTls {
       this.client = HttpClient.newBuilder()
           .sslContext(sslContext)
           .connectTimeout(connectTimeout)
+          // Match Micrometer's stock HttpUrlConnectionSender, which follows same-protocol
+          // redirects; HttpClient otherwise defaults to Redirect.NEVER.
+          .followRedirects(HttpClient.Redirect.NORMAL)
           .build();
       this.readTimeout = readTimeout;
     }

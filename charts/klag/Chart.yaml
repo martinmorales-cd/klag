@@ -35,4 +35,4 @@ annotations:
       email: aviv@dozorets.com
   artifacthub.io/changes: |
     - kind: added
-      description: OTLP exporter can trust extra CA certificates for an HTTPS collector served with an internally-signed cert; set metrics.otlp.caCertPath (env OTLP_CA_CERT_PATH / OTEL_EXPORTER_OTLP_CERTIFICATE) to a PEM bundle mounted via extraVolumes. Trust is additive over the JVM defaults and scoped to the OTLP exporter
+      description: OTLP exporter can trust extra CA certificates for an HTTPS collector served with an internally-signed cert; set metrics.otlp.caCertPath (env OTLP_CA_CERT_PATH / OTEL_EXPORTER_OTLP_CERTIFICATE) to a PEM bundle mounted with matching extraVolumes and extraVolumeMounts. Trust is additive over the JVM defaults and scoped to the OTLP exporter
