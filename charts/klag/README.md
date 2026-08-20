@@ -143,6 +143,7 @@ Set `KLAG_CONFIG_FILE` to the path of an external `application.properties` (typi
 | `metrics.otlp.headers` | Authentication headers (key1=value1,key2=value2) | `""` |
 | `metrics.otlp.serviceName` | Service name for OTEL_SERVICE_NAME | `klag` |
 | `metrics.otlp.resourceAttributes` | Additional resource attributes | `""` |
+| `metrics.otlp.caCertPath` | Path to a PEM CA bundle the exporter additionally trusts, for an HTTPS collector with an internally-signed cert (maps to `OTLP_CA_CERT_PATH`; added on top of JVM defaults). Mount it via `extraVolumes`/`extraVolumeMounts`. | `""` |
 | `metrics.otlp.existingSecret` | Existing secret for OTLP headers | `""` |
 | `metrics.otlp.secretKeys.headers` | Key in secret for headers | `otlp-headers` |
 

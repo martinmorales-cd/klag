@@ -136,10 +136,14 @@ These are environment-only. See [Datadog](/integrations/datadog/).
 | `OTEL_METRIC_EXPORT_INTERVAL` | Export interval (ms), default `60000`. |
 | `OTEL_SERVICE_NAME` | Service name, default `klag`. |
 | `OTEL_RESOURCE_ATTRIBUTES` | Additional resource attributes. |
+| `OTEL_EXPORTER_OTLP_CERTIFICATE` | Path to a PEM CA bundle the exporter additionally trusts (for an HTTPS collector with an internally-signed cert). Added on top of the JVM default trust, never replacing it. |
 
 **Custom variables (override `OTEL_*`):** `OTLP_ENDPOINT`, `OTLP_STEP_MS`,
-`OTLP_HEADERS`, `OTLP_RESOURCE_ATTRIBUTES`. Protocol is HTTP only (port 4318);
-temporality is cumulative. See [OTLP & Grafana Cloud](/integrations/otlp-grafana/).
+`OTLP_HEADERS`, `OTLP_RESOURCE_ATTRIBUTES`, `OTLP_CA_CERT_PATH` (alias for
+`OTEL_EXPORTER_OTLP_CERTIFICATE`). Transport is HTTP/protobuf (port 4318); both
+`http://` and `https://` endpoints are supported — for an internally-signed HTTPS
+collector, point `OTLP_CA_CERT_PATH` at the CA bundle. Temporality is cumulative.
+See [OTLP & Grafana Cloud](/integrations/otlp-grafana/).
 
 ## Logging
 

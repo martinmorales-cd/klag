@@ -9,3 +9,4 @@ metrics:
     headers: "Authorization=Basic dGVzdDp0ZXN0"
     serviceName: "klag-test"
     resourceAttributes: "environment=test,cluster=ci"
+    caCertPath: "/etc/shared-certificates/internal-https/collector.crt"

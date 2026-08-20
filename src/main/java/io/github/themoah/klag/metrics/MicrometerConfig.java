@@ -12,9 +12,12 @@ import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.micrometer.registry.otlp.AggregationTemporality;
 import io.micrometer.registry.otlp.OtlpConfig;
+import io.micrometer.registry.otlp.OtlpHttpMetricsSender;
 import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -201,9 +204,18 @@ public final class MicrometerConfig {
       }
     };
 
-    OtlpMeterRegistry registry = new OtlpMeterRegistry(config, Clock.SYSTEM);
-    log.info("OTLP registry created - endpoint: {}, temporality: {}",
-             config.url(), config.aggregationTemporality());
+    // When a CA-cert path is configured (OTLP_CA_CERT_PATH / OTEL_EXPORTER_OTLP_CERTIFICATE),
+    // route exports through an HTTP sender whose SSLContext additively trusts those CAs so an
+    // internally-signed HTTPS collector validates. Otherwise use the stock registry unchanged.
+    Optional<SSLContext> tls = OtlpTls.sslContextFromEnvironment();
+    OtlpMeterRegistry registry = tls
+        .map(ctx -> OtlpMeterRegistry.builder(config)
+            .metricsSender(new OtlpHttpMetricsSender(
+                OtlpTls.httpSender(ctx, config.connectTimeout(), config.readTimeout())))
+            .build())
+        .orElseGet(() -> new OtlpMeterRegistry(config, Clock.SYSTEM));
+    log.info("OTLP registry created - endpoint: {}, temporality: {}, customCaTrust: {}",
+             config.url(), config.aggregationTemporality(), tls.isPresent());
     return registry;
   }
 
