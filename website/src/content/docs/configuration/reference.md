@@ -138,11 +138,19 @@ These are environment-only. See [Datadog](/integrations/datadog/).
 | `OTEL_RESOURCE_ATTRIBUTES` | Additional resource attributes. |
 | `OTEL_EXPORTER_OTLP_CERTIFICATE` | Path to a PEM CA bundle the exporter additionally trusts (for an HTTPS collector with an internally-signed cert). Added on top of the JVM default trust, never replacing it. |
 
-**Custom variables (override `OTEL_*`):** `OTLP_ENDPOINT`, `OTLP_STEP_MS`,
-`OTLP_HEADERS`, `OTLP_RESOURCE_ATTRIBUTES`, `OTLP_CA_CERT_PATH` (alias for
-`OTEL_EXPORTER_OTLP_CERTIFICATE`). Transport is HTTP/protobuf (port 4318); both
-`http://` and `https://` endpoints are supported — for an internally-signed HTTPS
-collector, point `OTLP_CA_CERT_PATH` at the CA bundle. Temporality is cumulative.
+**Custom variables** — each takes precedence over its `OTEL_*` equivalent:
+
+| Variable | Overrides | Description |
+|---|---|---|
+| `OTLP_ENDPOINT` | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Full metrics endpoint URL (e.g. `http://localhost:4318/v1/metrics`). |
+| `OTLP_STEP_MS` | `OTEL_METRIC_EXPORT_INTERVAL` | Export interval in ms (default `60000`). |
+| `OTLP_HEADERS` | `OTEL_EXPORTER_OTLP_METRICS_HEADERS`, `OTEL_EXPORTER_OTLP_HEADERS` | Auth headers (`key1=value1,key2=value2`). |
+| `OTLP_RESOURCE_ATTRIBUTES` | `OTEL_RESOURCE_ATTRIBUTES` | Additional resource attributes (`key1=value1,key2=value2`). |
+| `OTLP_CA_CERT_PATH` | `OTEL_EXPORTER_OTLP_CERTIFICATE` | Path to a PEM CA bundle the exporter additionally trusts, for an HTTPS collector with an internally-signed cert. Added on top of the JVM default trust, never replacing it. |
+
+Transport is HTTP/protobuf (port 4318); both `http://` and `https://` endpoints are
+supported — for an internally-signed HTTPS collector, point `OTLP_CA_CERT_PATH` (or
+`OTEL_EXPORTER_OTLP_CERTIFICATE`) at the CA bundle. Temporality is cumulative.
 See [OTLP & Grafana Cloud](/integrations/otlp-grafana/).
 
 ## Logging
