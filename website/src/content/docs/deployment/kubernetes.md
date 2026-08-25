@@ -71,7 +71,9 @@ helm upgrade --install klag klag/klag \
 
 The chart rejects a ServiceMonitor with a non-Prometheus reporter because `/metrics`
 would return `404`. Add labels under `serviceMonitor.labels` when your Prometheus
-Operator uses a label selector. See
+Operator uses a label selector. Use `serviceMonitor.metricRelabelings` (post-scrape)
+and `serviceMonitor.relabelings` (pre-scrape) to drop high-cardinality labels or mint
+extra labels without a second ServiceMonitor. See
 [Troubleshooting](/guides/troubleshooting/#prometheus-does-not-discover-the-servicemonitor)
 for namespace and selector checks.
 

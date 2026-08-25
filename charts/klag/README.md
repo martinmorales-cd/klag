@@ -93,6 +93,16 @@ helm install klag ./charts/klag \
   --set serviceMonitor.enabled=true
 ```
 
+Drop high-cardinality member labels (or mint extra labels) with `serviceMonitor.metricRelabelings`:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  metricRelabelings:
+    - action: labeldrop
+      regex: ^(member_host|consumer_id|client_id)$
+```
+
 ## Configuration
 
 ### General Parameters
@@ -200,6 +210,8 @@ Set `KLAG_CONFIG_FILE` to the path of an external `application.properties` (typi
 | `serviceMonitor.interval` | Scrape interval | `30s` |
 | `serviceMonitor.scrapeTimeout` | Scrape timeout | `10s` |
 | `serviceMonitor.labels` | Additional labels | `{}` |
+| `serviceMonitor.metricRelabelings` | Prometheus `metric_relabel_configs` (post-scrape). Omitted when empty | `[]` |
+| `serviceMonitor.relabelings` | Prometheus `relabel_configs` (pre-scrape). Omitted when empty | `[]` |
 
 ### Pod Configuration
 
