@@ -69,6 +69,45 @@ validate_not_present() {
     fi
 }
 
+# Slice the ServiceMonitor document from a multi-doc helm template render.
+servicemonitor_doc() {
+    local values_file="$1"
+    local extra_args="${2:-}"
+    helm template test-release "${CHART_DIR}" ${values_file:+-f "$values_file"} ${extra_args} 2>/dev/null \
+        | awk 'BEGIN { RS="---" } /kind: ServiceMonitor/ { print; exit }'
+}
+
+# Assert relabel fields sit on the ServiceMonitor scrape endpoint (6-space keys
+# under spec.endpoints[0]), not merely somewhere in the chart output.
+validate_servicemonitor_endpoint_relabelings() {
+    local test_name="$1"
+    local values_file="$2"
+
+    echo -n "Validating: ${test_name}... "
+
+    local sm
+    sm="$(servicemonitor_doc "$values_file")"
+    if [ -z "$sm" ]; then
+        echo -e "${RED}FAILED${NC}"
+        echo "  No ServiceMonitor document in helm output"
+        ((failed++))
+        return
+    fi
+
+    if echo "$sm" | grep -qE '^      metricRelabelings:' \
+        && echo "$sm" | grep -qE '^        - action: labeldrop' \
+        && echo "$sm" | grep -qE '^      relabelings:' \
+        && echo "$sm" | grep -qE '^          targetLabel: cluster'; then
+        echo -e "${GREEN}PASSED${NC}"
+        ((passed++))
+    else
+        echo -e "${RED}FAILED${NC}"
+        echo "  Expected metricRelabelings/relabelings under spec.endpoints[0]"
+        echo "$sm" | sed 's/^/  /'
+        ((failed++))
+    fi
+}
+
 echo "--- Chart Linting ---"
 echo -n "Linting chart... "
 if helm lint "${CHART_DIR}" > /dev/null 2>&1; then
@@ -131,9 +170,7 @@ validate_output "Datadog secret created" "${TESTS_DIR}/test-values-datadog.yaml"
 # ServiceMonitor validation
 validate_output "ServiceMonitor created" "${TESTS_DIR}/test-values.yaml" "kind: ServiceMonitor"
 validate_output "ServiceMonitor scrapes /metrics" "${TESTS_DIR}/test-values.yaml" "path: /metrics"
-validate_output "ServiceMonitor metricRelabelings" "${TESTS_DIR}/test-values.yaml" "metricRelabelings"
-validate_output "ServiceMonitor labeldrop" "${TESTS_DIR}/test-values.yaml" "action: labeldrop"
-validate_output "ServiceMonitor relabelings" "${TESTS_DIR}/test-values.yaml" "targetLabel: cluster"
+validate_servicemonitor_endpoint_relabelings "ServiceMonitor endpoint relabelings" "${TESTS_DIR}/test-values.yaml"
 validate_not_present "No ServiceMonitor by default" "" "kind: ServiceMonitor"
 validate_not_present "No metricRelabelings when unset" "" "metricRelabelings" "--set serviceMonitor.enabled=true"
 
