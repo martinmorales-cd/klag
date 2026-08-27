@@ -103,6 +103,9 @@ serviceMonitor:
       regex: ^(member_host|consumer_id|client_id)$
 ```
 
+`labeldrop` on those names overlaps `CONSUMER_MEMBER_LABELS_ENABLED=false`, which is
+cheaper — Klag never builds the series.
+
 ## Configuration
 
 ### General Parameters

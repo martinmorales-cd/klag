@@ -73,7 +73,10 @@ The chart rejects a ServiceMonitor with a non-Prometheus reporter because `/metr
 would return `404`. Add labels under `serviceMonitor.labels` when your Prometheus
 Operator uses a label selector. Use `serviceMonitor.metricRelabelings` (post-scrape)
 and `serviceMonitor.relabelings` (pre-scrape) to drop high-cardinality labels or mint
-extra labels without a second ServiceMonitor. See
+extra labels without a second ServiceMonitor. Dropping `member_host`, `consumer_id`,
+and `client_id` with `labeldrop` overlaps
+`CONSUMER_MEMBER_LABELS_ENABLED=false`, which is cheaper — Klag never builds those
+series. See
 [Troubleshooting](/guides/troubleshooting/#prometheus-does-not-discover-the-servicemonitor)
 for namespace and selector checks.
 
