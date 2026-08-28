@@ -28,6 +28,12 @@ public final class MicrometerConfig {
 
   private static final Logger log = LoggerFactory.getLogger(MicrometerConfig.class);
 
+  // Timeouts for the custom OTLP HTTP sender (used only on the extra-CA-trust path). Mirrors the
+  // former PushRegistryConfig defaults, whose connectTimeout()/readTimeout() are deprecated in
+  // Micrometer 1.16; the sender owns its timeouts now instead of reading them off the registry config.
+  private static final Duration OTLP_CONNECT_TIMEOUT = Duration.ofSeconds(1);
+  private static final Duration OTLP_READ_TIMEOUT = Duration.ofSeconds(10);
+
   private MicrometerConfig() {}
 
   /**
@@ -211,7 +217,7 @@ public final class MicrometerConfig {
     OtlpMeterRegistry registry = tls
         .map(ctx -> OtlpMeterRegistry.builder(config)
             .metricsSender(new OtlpHttpMetricsSender(
-                OtlpTls.httpSender(ctx, config.connectTimeout(), config.readTimeout())))
+                OtlpTls.httpSender(ctx, OTLP_CONNECT_TIMEOUT, OTLP_READ_TIMEOUT)))
             .build())
         .orElseGet(() -> new OtlpMeterRegistry(config, Clock.SYSTEM));
     log.info("OTLP registry created - endpoint: {}, temporality: {}, customCaTrust: {}",
