@@ -50,8 +50,11 @@ public final class OtlpTls {
    * {@link SSLContext}. Custom {@code OTLP_CA_CERT_PATH} takes precedence over the
    * OTLP-spec {@code OTEL_EXPORTER_OTLP_CERTIFICATE}.
    *
-   * @return the context, or empty when no path is configured or it cannot be loaded
-   *     (in which case the exporter falls back to the JVM default trust)
+   * @return the additive-trust context, or empty when no CA-cert path is configured
+   * @throws IllegalStateException when a path is configured but yields no usable certificates
+   *     (missing, empty, or unparseable file). Failing here is deliberate: silently falling
+   *     back to JVM default trust would reproduce the exact PKIX failure this setting exists to
+   *     fix, so a typo or unmounted secret would be indistinguishable from the original error.
    */
   public static Optional<SSLContext> sslContextFromEnvironment() {
     String path = configuredCertPath();
@@ -63,10 +66,10 @@ public final class OtlpTls {
       log.info("OTLP exporter will trust extra CA certificates from {}", path);
       return Optional.of(ctx);
     } catch (Exception e) {
-      // Fail safe: keep the JVM default trust rather than breaking metrics startup.
-      log.error("Failed to load OTLP CA certificates from {} - falling back to JVM default "
-          + "trust; OTLP export to an internally-signed endpoint may fail", path, e);
-      return Optional.empty();
+      throw new IllegalStateException(
+          "OTLP CA cert path '" + path + "' is set but no usable certificates could be loaded "
+          + "(missing, empty, or unparseable PEM); refusing to fall back to JVM default trust",
+          e);
     }
   }
 
@@ -81,8 +84,10 @@ public final class OtlpTls {
 
   /**
    * Builds an {@link SSLContext} whose trust manager combines the JDK default CAs with
-   * the X.509 certificates in {@code pemPath}. An empty file yields a defaults-only
-   * context; invalid content raises the underlying parse exception.
+   * the X.509 certificates in {@code pemPath}. A bundle that yields no certificates (empty
+   * or cert-less file) raises a {@link java.security.cert.CertificateException}, as does
+   * invalid content — so the caller falls back to the stock JVM-default path rather than
+   * reporting custom trust it does not have.
    */
   static SSLContext buildAdditiveContext(Path pemPath) throws Exception {
     SSLContext ctx = SSLContext.getInstance("TLS");
@@ -93,7 +98,10 @@ public final class OtlpTls {
   /**
    * Builds the additive trust manager that backs {@link #buildAdditiveContext}: the JDK
    * default CAs combined with the X.509 certificates in {@code pemPath}. Its accepted
-   * issuers are always a superset of the JDK defaults. Package-private for tests.
+   * issuers are always a strict superset of the JDK defaults. A bundle with no certificates
+   * raises a {@link java.security.cert.CertificateException} rather than silently yielding a
+   * defaults-only manager, so a misconfigured path is never mistaken for added trust.
+   * Package-private for tests.
    */
   static X509TrustManager buildAdditiveTrustManager(Path pemPath) throws Exception {
     List<X509Certificate> extras = new ArrayList<>();
@@ -105,14 +113,14 @@ public final class OtlpTls {
       }
     }
 
+    if (extras.isEmpty()) {
+      throw new java.security.cert.CertificateException(
+          "OTLP CA cert file " + pemPath + " contained no certificates");
+    }
+
     List<X509TrustManager> managers = new ArrayList<>();
     managers.add(defaultTrustManager());
-    if (extras.isEmpty()) {
-      log.warn("OTLP CA cert file {} contained no certificates; using JVM default trust only",
-          pemPath);
-    } else {
-      managers.add(trustManagerFor(extras));
-    }
+    managers.add(trustManagerFor(extras));
     return new CompositeX509TrustManager(managers);
   }
 

@@ -1,6 +1,5 @@
 package io.github.themoah.klag.metrics;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -14,7 +13,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import org.junit.jupiter.api.Test;
@@ -72,18 +70,14 @@ class OtlpTlsTest {
   }
 
   @Test
-  void additiveContext_emptyFile_yieldsDefaultsOnlyContext() throws Exception {
+  void additiveContext_emptyFile_throws() throws Exception {
     Path pem = tmp.resolve("empty.pem");
     Files.writeString(pem, "");
 
-    SSLContext ctx = OtlpTls.buildAdditiveContext(pem);
-
-    // Trust is never reduced: an empty bundle still yields a usable defaults-only context whose
-    // accepted issuers match the JDK defaults exactly.
-    assertNotNull(ctx);
-    assertNotNull(ctx.getSocketFactory());
-    assertTrue(OtlpTls.buildAdditiveTrustManager(pem).getAcceptedIssuers().length
-        == defaultTrustManager().getAcceptedIssuers().length);
+    // A configured-but-cert-less bundle is a misconfiguration: rather than silently yield a
+    // defaults-only context (which would log customCaTrust: true while trusting nothing extra),
+    // it throws so the caller falls back to the stock JVM-default exporter path.
+    assertThrows(CertificateException.class, () -> OtlpTls.buildAdditiveContext(pem));
   }
 
   @Test
