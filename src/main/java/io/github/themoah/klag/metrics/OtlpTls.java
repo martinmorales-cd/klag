@@ -97,11 +97,11 @@ public final class OtlpTls {
 
   /**
    * Builds the additive trust manager that backs {@link #buildAdditiveContext}: the JDK
-   * default CAs combined with the X.509 certificates in {@code pemPath}. Its accepted
-   * issuers are always a strict superset of the JDK defaults. A bundle with no certificates
-   * raises a {@link java.security.cert.CertificateException} rather than silently yielding a
-   * defaults-only manager, so a misconfigured path is never mistaken for added trust.
-   * Package-private for tests.
+   * default trust anchors merged with the X.509 certificates in {@code pemPath} into a single
+   * PKIX trust manager. Its accepted issuers are always a superset of the JDK defaults, so trust
+   * is only ever widened. A bundle with no certificates raises a
+   * {@link java.security.cert.CertificateException} rather than silently yielding a defaults-only
+   * manager, so a misconfigured path is never mistaken for added trust. Package-private for tests.
    */
   static X509TrustManager buildAdditiveTrustManager(Path pemPath) throws Exception {
     List<X509Certificate> extras = new ArrayList<>();
@@ -118,10 +118,19 @@ public final class OtlpTls {
           "OTLP CA cert file " + pemPath + " contained no certificates");
     }
 
-    List<X509TrustManager> managers = new ArrayList<>();
-    managers.add(defaultTrustManager());
-    managers.add(trustManagerFor(extras));
-    return new CompositeX509TrustManager(managers);
+    // Merge the JDK default trust anchors and the extra CAs into one KeyStore, then build a single
+    // PKIX trust manager over it. That yields a real X509ExtendedTrustManager (endpoint identity
+    // checks intact, no JSSE wrapper), and its trust anchors are a superset of the JDK defaults.
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    ks.load(null, null);
+    int i = 0;
+    for (X509Certificate ca : defaultTrustManager().getAcceptedIssuers()) {
+      ks.setCertificateEntry("default-ca-" + (i++), ca);
+    }
+    for (X509Certificate ca : extras) {
+      ks.setCertificateEntry("otlp-ca-" + (i++), ca);
+    }
+    return firstX509(loadTrustManagerFactory(ks));
   }
 
   /** Returns an {@link HttpSender} backed by the JDK HttpClient using {@code sslContext}. */
@@ -132,16 +141,6 @@ public final class OtlpTls {
 
   private static X509TrustManager defaultTrustManager() throws Exception {
     return firstX509(loadTrustManagerFactory((KeyStore) null));
-  }
-
-  private static X509TrustManager trustManagerFor(List<X509Certificate> certs) throws Exception {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    ks.load(null, null);
-    int i = 0;
-    for (X509Certificate cert : certs) {
-      ks.setCertificateEntry("otlp-ca-" + (i++), cert);
-    }
-    return firstX509(loadTrustManagerFactory(ks));
   }
 
   private static TrustManagerFactory loadTrustManagerFactory(KeyStore ks) throws Exception {
@@ -158,60 +157,6 @@ public final class OtlpTls {
       }
     }
     throw new IllegalStateException("No X509TrustManager found");
-  }
-
-  /**
-   * Trust manager that accepts a certificate if <em>any</em> delegate accepts it. Delegates
-   * are consulted in order (JDK default first, extra CAs second), so public endpoints keep
-   * validating normally and internally-signed ones validate against the extra CAs.
-   */
-  private static final class CompositeX509TrustManager implements X509TrustManager {
-    private final List<X509TrustManager> delegates;
-
-    CompositeX509TrustManager(List<X509TrustManager> delegates) {
-      this.delegates = delegates;
-    }
-
-    @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType)
-        throws java.security.cert.CertificateException {
-      java.security.cert.CertificateException last = null;
-      for (X509TrustManager tm : delegates) {
-        try {
-          tm.checkServerTrusted(chain, authType);
-          return;
-        } catch (java.security.cert.CertificateException e) {
-          last = e;
-        }
-      }
-      throw (last != null) ? last : new java.security.cert.CertificateException("No trust managers");
-    }
-
-    @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType)
-        throws java.security.cert.CertificateException {
-      java.security.cert.CertificateException last = null;
-      for (X509TrustManager tm : delegates) {
-        try {
-          tm.checkClientTrusted(chain, authType);
-          return;
-        } catch (java.security.cert.CertificateException e) {
-          last = e;
-        }
-      }
-      throw (last != null) ? last : new java.security.cert.CertificateException("No trust managers");
-    }
-
-    @Override
-    public X509Certificate[] getAcceptedIssuers() {
-      List<X509Certificate> issuers = new ArrayList<>();
-      for (X509TrustManager tm : delegates) {
-        for (X509Certificate issuer : tm.getAcceptedIssuers()) {
-          issuers.add(issuer);
-        }
-      }
-      return issuers.toArray(new X509Certificate[0]);
-    }
   }
 
   /**
