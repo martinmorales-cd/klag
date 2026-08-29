@@ -1,0 +1,31 @@
+{
+  "name": "klag-docs",
+  "title": "Klag documentation",
+  "description": "Read-only MCP server for Klag, the open-source Kafka consumer lag exporter. Search the documentation, read a page, and look up configuration keys and exported metrics. It reads documentation only — a self-hosted Klag instance exposes its own /mcp endpoint that answers questions about your Kafka consumer groups.",
+  "version": "1.0.0",
+  "websiteUrl": "https://klag.dev",
+  "repository": {
+    "url": "https://github.com/themoah/klag",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://klag.dev/mcp"
+    }
+  ],
+  "authentication": {
+    "type": "none"
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "prompts": false
+  },
+  "tools": [
+    { "name": "search_klag_docs", "description": "Full-text search across the Klag documentation." },
+    { "name": "get_klag_doc", "description": "Return the full markdown of one klag.dev page." },
+    { "name": "get_klag_config", "description": "Look up Klag environment variables and their defaults." },
+    { "name": "get_klag_metric", "description": "Look up the metrics Klag exports and what they mean." }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://agenticresourcediscovery.org/schemas/catalog/1.0/schema.json",
+  "version": "1.0",
+  "provider": {
+    "name": "Klag",
+    "url": "https://klag.dev",
+    "description": "Open-source Kafka consumer lag exporter. Monitors consumer lag, lag velocity, hot partitions, time-based lag, commit staleness, data-loss risk, and consumer-group state; exports to Prometheus, Datadog, or OTLP.",
+    "repository": "https://github.com/themoah/klag",
+    "license": "Apache-2.0"
+  },
+  "resources": [
+    {
+      "id": "urn:air:klag.dev:mcp:docs",
+      "displayName": "Klag documentation MCP server",
+      "description": "Read-only MCP server answering questions about Klag: search the docs, read a page, look up a configuration key or an exported metric. Does not read any Kafka cluster.",
+      "mediaType": "application/vnd.mcp+json",
+      "url": "https://klag.dev/mcp"
+    },
+    {
+      "id": "urn:air:klag.dev:api:klag-http",
+      "displayName": "Klag HTTP API (OpenAPI 3.1)",
+      "description": "The HTTP surface of a self-hosted Klag instance: /healthz, /readyz, /metrics, /version, and the opt-in /mcp endpoint.",
+      "mediaType": "application/vnd.oai.openapi+json;version=3.1",
+      "url": "https://klag.dev/openapi.json"
+    },
+    {
+      "id": "urn:air:klag.dev:skills:index",
+      "displayName": "Klag agent skills",
+      "description": "Agent Skills index for installing Klag against a Kafka cluster, connecting its MCP endpoint, and triaging consumer lag.",
+      "mediaType": "application/json",
+      "url": "https://klag.dev/.well-known/agent-skills/index.json"
+    },
+    {
+      "id": "urn:air:klag.dev:docs:llms-txt",
+      "displayName": "Klag documentation corpus (llms.txt)",
+      "description": "Machine-readable index of every documentation page, with a concatenated full-text corpus at /llms-full.txt.",
+      "mediaType": "text/markdown",
+      "url": "https://klag.dev/llms.txt"
+    },
+    {
+      "id": "urn:air:klag.dev:agent:card",
+      "displayName": "Klag A2A agent card",
+      "description": "Agent-to-agent card describing the Klag documentation agent and how to reach it.",
+      "mediaType": "application/json",
+      "url": "https://klag.dev/.well-known/agent-card.json"
+    }
+  ],
+  "trustManifest": {
+    "identity": {
+      "domain": "klag.dev",
+      "repository": "https://github.com/themoah/klag",
+      "sourceAvailable": true
+    },
+    "attestations": [
+      {
+        "type": "license",
+        "value": "Apache-2.0",
+        "url": "https://github.com/themoah/klag/blob/main/LICENSE"
+      },
+      {
+        "type": "sbom",
+        "description": "Container images are published with provenance from GitHub Actions and scanned with Trivy on every build.",
+        "url": "https://github.com/themoah/klag/actions"
+      }
+    ]
+  }
+}

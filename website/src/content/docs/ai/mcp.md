@@ -6,6 +6,13 @@ description: Klag's opt-in, read-only MCP endpoint lets AI agents query consumer
 Klag exposes an optional **MCP** (Model Context Protocol) endpoint so AI agents (SRE
 copilots, dev assistants) can query consumer-lag state in natural workflows.
 
+:::note[Two different MCP servers]
+This page is about the endpoint on **your Klag instance**, which answers questions about
+your Kafka consumer groups. klag.dev separately hosts a read-only **documentation** MCP
+server at `https://klag.dev/mcp`, which answers questions about Klag itself — config keys,
+metrics, deployment. See [Developers](/developers/) for that one.
+:::
+
 It is **opt-in, read-only, and zero-impact when off**. The endpoint serves an in-memory
 snapshot the metrics collector publishes after each cycle; it never queries Kafka or
 touches the collection flow.
@@ -24,6 +31,9 @@ collection runs.
 ## Transport
 
 Streamable HTTP, **JSON-RPC 2.0 over POST**. A `GET` returns `405`.
+
+The full HTTP surface, including this endpoint, is published as an OpenAPI 3.1 spec at
+[`klag.dev/openapi.json`](https://klag.dev/openapi.json).
 
 ## Tools
 

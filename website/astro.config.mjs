@@ -17,11 +17,26 @@ const head = [
     tag: 'meta',
     attrs: { name: 'robots', content: 'index, follow, max-image-preview:large' },
   },
-  // GEO: advertise the machine-readable docs corpus (llms.txt convention).
+  // GEO: advertise the machine-readable docs corpus (llms.txt convention) and the
+  // per-page markdown twin, so an agent can take the .md instead of parsing HTML.
   {
     tag: 'link',
     attrs: { rel: 'alternate', type: 'text/markdown', href: '/llms.txt', title: 'llms.txt' },
   },
+  // Agent discovery: the ARD catalog lists the MCP server, skills, and OpenAPI spec.
+  {
+    tag: 'link',
+    attrs: { rel: 'service-desc', type: 'application/json', href: '/.well-known/ai-catalog.json' },
+  },
+  // Social card. Absolute URLs — scrapers do not resolve relative og:image.
+  { tag: 'meta', attrs: { property: 'og:image', content: `${SITE}/og.png` } },
+  { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+  { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+  {
+    tag: 'meta',
+    attrs: { property: 'og:image:alt', content: 'Klag — Kafka consumer lag exporter' },
+  },
+  { tag: 'meta', attrs: { name: 'twitter:image', content: `${SITE}/og.png` } },
   // Favicons: higher-res PNG + Apple touch icon (Starlight injects the base /favicon-32.png).
   { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '48x48', href: '/favicon-48.png' } },
   { tag: 'link', attrs: { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' } },
@@ -46,8 +61,8 @@ export default defineConfig({
     '/migration': '/getting-started/migrating-from-kafka-lag-exporter/',
     '/agent-setup': '/ai/agent-setup/',
     '/getting-started/comparison': '/comparisons/overview/',
+    // One entry only: Astro normalises the trailing slash, and defining both collides.
     '/comparisons': '/comparisons/overview/',
-    '/comparisons/': '/comparisons/overview/',
   },
 
   integrations: [
@@ -135,6 +150,7 @@ export default defineConfig({
           items: [
             { label: 'Agent Setup', slug: 'ai/agent-setup' },
             { label: 'MCP Endpoint', slug: 'ai/mcp' },
+            { label: 'Developers', slug: 'developers' },
           ],
         },
         {
@@ -152,8 +168,17 @@ export default defineConfig({
             { label: 'Contributing', slug: 'development/contributing' },
           ],
         },
+        {
+          label: 'Project',
+          items: [
+            { label: 'About', slug: 'about' },
+            { label: 'Privacy', slug: 'privacy' },
+          ],
+        },
       ],
     }),
-    sitemap(),
+    // lastmod is the build timestamp: the site is statically rebuilt on every content
+    // change, so "last built" and "last changed" are the same event here.
+    sitemap({ lastmod: new Date() }),
   ],
 });

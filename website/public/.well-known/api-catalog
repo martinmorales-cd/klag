@@ -1,0 +1,35 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://klag.dev",
+      "service-desc": [
+        {
+          "href": "https://klag.dev/openapi.json",
+          "type": "application/vnd.oai.openapi+json;version=3.1",
+          "title": "Klag HTTP API (OpenAPI 3.1, JSON)"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://klag.dev/developers/",
+          "type": "text/html",
+          "title": "Klag developer documentation"
+        }
+      ],
+      "service-meta": [
+        {
+          "href": "https://klag.dev/.well-known/ai-catalog.json",
+          "type": "application/json",
+          "title": "Agentic Resource Discovery catalog"
+        }
+      ],
+      "related": [
+        {
+          "href": "https://klag.dev/mcp",
+          "type": "application/json",
+          "title": "Klag documentation MCP server"
+        }
+      ]
+    }
+  ]
+}
