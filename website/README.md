@@ -64,30 +64,27 @@ a resource, add it to `ai-catalog.json` as well or agents will not find it.
 Cloudflare Web Analytics (cookieless). The beacon is injected only when
 `CF_ANALYTICS_TOKEN` is set in the build environment.
 
-## Deploy
+## CI and deploy
 
-**Deploys run in CI, not from a laptop.** `.github/workflows/website.yml` builds, tests and
-type-checks every push and PR touching `website/**` or `plugin/**`, and publishes the `klag`
-Worker on push to `main`. A local `wrangler deploy` would ship whatever happens to be in the
-working tree, so there is deliberately no `npm run deploy` script.
+**GitHub Actions** (`.github/workflows/website.yml`) builds, tests, and type-checks every
+push and PR touching `website/**` or `plugin/**`. It does not publish.
 
-The deploy job runs `npm ci` -> `npm run build` -> `npx wrangler deploy`, then verifies the
-live agent surface (`/mcp` answers `tools/list`, the well-known files return 200, an unknown
-path still returns 404) and fails the run if any of it is wrong.
+**Cloudflare Workers Builds** (Git integration on the `klag` Worker) deploys on push:
+`main` runs `npm run build` then `wrangler deploy` to **klag.dev**; other branches upload
+preview versions. Configure build commands and branch filters in the Cloudflare dashboard.
 
-Required repository secrets:
+Optional Cloudflare build env:
 
-| Secret | Purpose |
+| Variable | Purpose |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | API token with the **Edit Cloudflare Workers** template scopes. |
-| `CLOUDFLARE_ACCOUNT_ID` | The account that owns the `klag` Worker. |
-| `CF_ANALYTICS_TOKEN` | Optional. Without it the analytics beacon is simply not injected. |
+| `CF_ANALYTICS_TOKEN` | Without it the analytics beacon is simply not injected. |
 
 `klag.dev` is attached to the `klag` Worker as a custom domain (`wrangler.jsonc`); there is
-no Pages project.
+no Pages project. There is deliberately no `npm run deploy` script — a local
+`wrangler deploy` would ship whatever happens to be in the working tree.
 
-**Break glass.** If CI is down and the site must ship, build and publish by hand from
-`website/` on Node 22+, and say so in the PR:
+**Break glass.** If Cloudflare Builds is down and the site must ship, build and publish by
+hand from `website/` on Node 22+, and say so in the PR:
 
 ```bash
 npm ci && npm run build && npx wrangler deploy

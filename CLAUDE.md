@@ -102,9 +102,10 @@ installed payload is 36 KB. Keep the skill thin — it fetches
 ## klag.dev agent surface
 
 The site is a Cloudflare **Worker** with static assets (`website/src/worker.ts` +
-`wrangler.jsonc`; there is no Pages project). It deploys from CI only —
-`.github/workflows/website.yml` publishes on push to `main` and there is deliberately no
-local deploy script, so never run `wrangler deploy` from a working tree. The Worker
+`wrangler.jsonc`; there is no Pages project). **Cloudflare Workers Builds** (Git integration
+on the `klag` Worker) publishes on push; `.github/workflows/website.yml` only builds, tests,
+and type-checks. There is deliberately no local deploy script, so never run
+`wrangler deploy` from a working tree. The Worker
 serves a read-only **documentation MCP server at `klag.dev/mcp`** (`search_klag_docs`,
 `get_klag_doc`, `get_klag_config`, `get_klag_metric`), which answers questions *about* Klag
 and must not be confused with a running instance's `/mcp`, which answers questions about a

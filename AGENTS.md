@@ -67,5 +67,5 @@ must not be hand-edited**: `dist/llms.txt`, `dist/llms-full.txt`, the per-page `
 Change `website/scripts/gen-llms.mjs` or `gen-skills.mjs` instead. The plugin under
 `plugin/` is the single source of truth for the skills the site serves.
 
-The site deploys from CI only (`.github/workflows/website.yml`, on push to `main`). Do not
-run `wrangler deploy` from a working tree.
+Cloudflare Workers Builds publishes the site on git push; `.github/workflows/website.yml`
+only builds, tests, and type-checks. Do not run `wrangler deploy` from a working tree.

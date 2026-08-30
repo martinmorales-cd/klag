@@ -3,6 +3,9 @@ name: Website
 # The website is a self-contained surface — Astro build, a Cloudflare Worker, the docs MCP
 # server, and the generators that produce every agent-facing artifact. Every other workflow
 # path-ignores website/**, so without this one it ships untested.
+#
+# Deploy is Cloudflare Workers Builds (Git integration on the klag Worker). This workflow
+# only builds, tests, and type-checks — it does not publish.
 on:
   push:
     branches:
@@ -20,12 +23,6 @@ on:
       - 'website/**'
       - 'plugin/**'
       - '.github/workflows/website.yml'
-
-# Deploys are serialised: a second push while one is publishing waits rather than
-# racing it to the same Worker.
-concurrency:
-  group: website-deploy
-  cancel-in-progress: false
 
 jobs:
   build:
@@ -75,72 +72,3 @@ jobs:
             if [ ! -f "dist/$f" ]; then echo "MISSING dist/$f"; missing=1; fi
           done
           exit $missing
-
-  deploy:
-    # klag.dev is a Cloudflare Worker with static assets. Deploying is CI's job: a local
-    # `wrangler deploy` publishes whatever happens to be in that working tree.
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    environment:
-      name: production
-      url: https://klag.dev
-    defaults:
-      run:
-        working-directory: website
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: website/.node-version
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        # CF_ANALYTICS_TOKEN is optional: without it the analytics beacon is simply
-        # not injected, which is why it is not gated on here.
-        env:
-          CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
-        run: npm run build
-
-      - name: Publish the Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
-
-      - name: Verify the live agent surface
-        run: |
-          set -euo pipefail
-          # Cloudflare propagates a Worker release in seconds; retry rather than sleep-and-hope.
-          for attempt in 1 2 3 4 5; do
-            tools=$(curl -fsS https://klag.dev/mcp \
-                      -H 'content-type: application/json' \
-                      -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' || true)
-            case "$tools" in *search_klag_docs*) break ;; esac
-            echo "attempt $attempt: /mcp not serving tools yet"
-            sleep 10
-          done
-          case "$tools" in
-            *search_klag_docs*) echo "/mcp OK" ;;
-            *) echo "/mcp did not return tools/list after deploy"; exit 1 ;;
-          esac
-
-          fail=0
-          for path in /llms.txt /openapi.json /pricing.md /index.md \
-                      /.well-known/agent-skills/index.json /.well-known/ai-catalog.json; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://klag.dev$path")
-            [ "$code" = 200 ] || { echo "https://klag.dev$path -> $code"; fail=1; }
-          done
-          code=$(curl -s -o /dev/null -w '%{http_code}' https://klag.dev/this-path-does-not-exist)
-          [ "$code" = 404 ] || { echo "404 handling broken: got $code"; fail=1; }
-          exit $fail
