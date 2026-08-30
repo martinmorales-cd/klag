@@ -257,3 +257,11 @@ serviceMonitor:
   scrapeTimeout: 10s
   # Additional labels for the ServiceMonitor
   labels: {}
+  # Prometheus metric_relabel_configs applied after scrape (drop labels, mint
+  # extra labels from existing ones). Empty = omit the field.
+  # Example:
+  # - action: labeldrop
+  #   regex: ^(member_host|consumer_id|client_id)$
+  metricRelabelings: []
+  # Prometheus relabel_configs applied to the scrape target before scrape.
+  relabelings: []

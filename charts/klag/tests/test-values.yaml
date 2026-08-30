@@ -11,3 +11,10 @@ metrics:
 
 serviceMonitor:
   enabled: true
+  metricRelabelings:
+    - action: labeldrop
+      regex: ^(member_host|consumer_id|client_id)$
+  relabelings:
+    - action: replace
+      targetLabel: cluster
+      replacement: test

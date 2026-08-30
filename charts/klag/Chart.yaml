@@ -2,7 +2,7 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.10
+version: 0.3.11
 appVersion: "0.2.15"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
@@ -36,3 +36,13 @@ annotations:
   artifacthub.io/changes: |
     - kind: added
       description: OTLP exporter can trust extra CA certificates for an HTTPS collector served with an internally-signed cert; set metrics.otlp.caCertPath (env OTLP_CA_CERT_PATH / OTEL_EXPORTER_OTLP_CERTIFICATE) to a PEM bundle mounted with matching extraVolumes and extraVolumeMounts. Trust is additive over the JVM defaults and scoped to the OTLP exporter
+    - kind: added
+      description: Expose serviceMonitor.metricRelabelings and serviceMonitor.relabelings so Prometheus Operator can rewrite labels without a second ServiceMonitor or a chart fork
+    - kind: security
+      description: Upgrade Micrometer to 1.16.6 (CVE-2026-40984 in micrometer-core; the 1.12 line is EOL and unpatched), which moves the Prometheus registry onto the Prometheus Java client 1.x and drops the EOL io.prometheus:simpleclient jars; scraped metric names, labels and values are unchanged
+    - kind: changed
+      description: Drop the unused vertx-micrometer-metrics dependency
+    - kind: fixed
+      description: A topic deleted while a group still has committed offsets for it no longer keeps every cycle partial (which froze stale-series cleanup for up to offsets.retention.minutes); such topics are filtered out and their series retired
+    - kind: fixed
+      description: The MCP snapshot now refreshes on a partial cycle instead of freezing at the last complete one, so one failing consumer group no longer leaves AI agents reading stale data while /metrics stays current

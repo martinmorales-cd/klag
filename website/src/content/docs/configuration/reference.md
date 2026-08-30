@@ -68,7 +68,7 @@ For SASL/SSL, common settings include `KAFKA_SECURITY_PROTOCOL`,
 | `METRICS_GROUP_FILTER` | `*` | Comma-separated glob include patterns. |
 | `METRICS_GROUP_EXCLUDE` | _(empty)_ | Comma-separated glob exclude patterns. |
 | `METRICS_JVM_ENABLED` | `false` | Export JVM metrics. |
-| `CONSUMER_MEMBER_LABELS_ENABLED` | `true` | Tag consumer-owned per-partition lag metrics with `member_host` / `consumer_id` / `client_id` (kafka-lag-exporter parity). Set `false` to drop them and reduce cardinality. |
+| `CONSUMER_MEMBER_LABELS_ENABLED` | `true` | Tag consumer-owned per-partition lag metrics with `member_host` / `consumer_id` / `client_id` (kafka-lag-exporter parity). Set `false` to drop them and reduce cardinality. Cheaper than Prometheus `labeldrop` of the same names, which still scrapes the series first. |
 | `LAG_TREND_DEADBAND_MSG_PER_SEC` | `1.0` | STABLE band for the MCP lag-trend classifier. |
 | `COMMIT_FRESHNESS_ENABLED` | `true` | Track inferred time since a lagging group/topic's committed-offset sum last changed. |
 | `ISR_ENABLED` | `true` | Detect and report under-replicated partitions. |
