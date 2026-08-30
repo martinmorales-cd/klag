@@ -135,6 +135,10 @@
                   "summary": "List the available tools",
                   "value": { "jsonrpc": "2.0", "id": 1, "method": "tools/list" }
                 },
+                "initializedNotification": {
+                  "summary": "A notification (no id) — answered with 202 and no body",
+                  "value": { "jsonrpc": "2.0", "method": "notifications/initialized" }
+                },
                 "findLaggingGroups": {
                   "summary": "Find consumer groups above a lag threshold",
                   "value": {
@@ -161,6 +165,9 @@
                 }
               }
             }
+          },
+          "202": {
+            "description": "The message was a JSON-RPC notification — any request without an `id`, such as `notifications/initialized`. Accepted with no response body, per JSON-RPC 2.0."
           },
           "401": {
             "description": "`MCP_AUTH_TOKEN` is set and the `Authorization: Bearer <token>` header is missing or wrong. Rejected before JSON-RPC framing, so the body is a plain error object rather than a JSON-RPC envelope.",
