@@ -123,7 +123,7 @@
         "tags": ["mcp"],
         "operationId": "callMcp",
         "summary": "MCP endpoint (JSON-RPC 2.0)",
-        "description": "Read-only Model Context Protocol endpoint over Streamable HTTP. Disabled unless `MCP_ENABLED=true`, and served from the metrics collector's in-memory snapshot — it never queries Kafka directly, so `METRICS_REPORTER` must also be set. Path is configurable with `MCP_PATH`.\n\nMethods: `initialize`, `ping`, `notifications/initialized`, `tools/list`, `tools/call`. Tools: `list_consumer_groups`, `get_consumer_group_lag`, `find_lagging_groups`, `diagnose`.",
+        "description": "Read-only Model Context Protocol endpoint over Streamable HTTP. Registered when `MCP_ENABLED=true`. Served from the metrics collector's in-memory snapshot — it never queries Kafka directly, so the tools report that the snapshot is not ready until metrics collection runs (`METRICS_REPORTER`). Path is configurable with `MCP_PATH`.\n\nMethods: `initialize`, `ping`, `notifications/initialized`, `tools/list`, `tools/call`. Tools: `list_consumer_groups`, `get_consumer_group_lag`, `find_lagging_groups`, `diagnose`.",
         "security": [{}, { "mcpBearerToken": [] }],
         "requestBody": {
           "required": true,
@@ -163,10 +163,14 @@
             }
           },
           "401": {
-            "description": "`MCP_AUTH_TOKEN` is set and the `Authorization: Bearer <token>` header is missing or wrong.",
+            "description": "`MCP_AUTH_TOKEN` is set and the `Authorization: Bearer <token>` header is missing or wrong. Rejected before JSON-RPC framing, so the body is a plain error object rather than a JSON-RPC envelope.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/JsonRpcError" }
+                "schema": {
+                  "type": "object",
+                  "properties": { "error": { "type": "string", "example": "Unauthorized" } },
+                  "required": ["error"]
+                }
               }
             }
           },

@@ -28,6 +28,7 @@ const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
+const INTERNAL_ERROR = -32603;
 
 async function readResource(uri: string, env: Env) {
   const known = RESOURCES.find((resource) => resource.uri === uri);
@@ -71,9 +72,27 @@ async function handleMcp(request: Request, env: Env): Promise<Response> {
   }
 
   const { id, method, params } = body;
-  // Notifications (no id) expect no response body.
-  const isNotification = !('id' in body);
+  // JSON-RPC notifications (no id) take no response body at all -- not a result and not
+  // an error. Clients send notifications/cancelled as well as notifications/initialized,
+  // and answering either with a body is a protocol violation.
+  if (!('id' in body)) return new Response(null, { status: 202 });
 
+  // env.ASSETS.fetch can reject transiently. Without this, the rejection escapes the
+  // Worker as a 500 and the client sees no JSON-RPC error at all.
+  try {
+    return await dispatchMcp(id, method, params, env);
+  } catch (err) {
+    console.error('MCP dispatch failed', method, err);
+    return json(rpcError(id, INTERNAL_ERROR, 'Internal error'));
+  }
+}
+
+async function dispatchMcp(
+  id: unknown,
+  method: string,
+  params: any,
+  env: Env,
+): Promise<Response> {
   switch (method) {
     case 'initialize':
       return json(rpcResult(id, {
@@ -90,7 +109,7 @@ async function handleMcp(request: Request, env: Env): Promise<Response> {
       return json(rpcResult(id, {}));
 
     case 'notifications/initialized':
-      return isNotification ? new Response(null, { status: 202 }) : json(rpcResult(id, {}));
+      return json(rpcResult(id, {}));
 
     case 'tools/list':
       return json(rpcResult(id, { tools: TOOLS }));

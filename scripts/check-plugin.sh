@@ -24,10 +24,12 @@ if plugin.get("name") != "klag":
           " (it namespaces the commands: /klag:install)", file=sys.stderr)
     ok = False
 # agent-plugins.org $schema: how non-Claude agents recognise the manifest (klag.dev's
-# /.well-known/ai-catalog.json points at the same plugin).
-if not plugin.get("$schema", "").startswith("https://agent-plugins.org/"):
+# /.well-known/ai-catalog.json points at the same plugin). Pin the exact 1.0.0 URI --
+# a prefix check passes URLs that 404, which is what shipped before.
+PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+if plugin.get("$schema") != PLUGIN_SCHEMA:
     print(f"FAIL: plugin.json $schema is {plugin.get('$schema')!r},"
-          " expected an https://agent-plugins.org/ schema URL", file=sys.stderr)
+          f" expected {PLUGIN_SCHEMA!r}", file=sys.stderr)
     ok = False
 # Enumerating these replaces the convention default; we rely on discovery of plugin/commands/.
 for key in ("commands", "agents", "hooks", "mcpServers"):
