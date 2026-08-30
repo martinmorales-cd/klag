@@ -114,6 +114,10 @@ spec:
             - name: OTLP_STEP_MS
               value: {{ .Values.metrics.otlp.stepMs | quote }}
             {{- end }}
+            {{- if .Values.metrics.otlp.caCertPath }}
+            - name: OTLP_CA_CERT_PATH
+              value: {{ .Values.metrics.otlp.caCertPath | quote }}
+            {{- end }}
             {{- end }}
             # Datadog configuration (when reporter is datadog)
             {{- if eq .Values.metrics.reporter "datadog" }}

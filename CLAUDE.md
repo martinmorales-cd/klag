@@ -171,14 +171,16 @@ See `docs/superpowers/specs/2026-06-01-mcp-support-design.md`.
 - `OTEL_METRIC_EXPORT_INTERVAL` - Export interval in milliseconds (default: 60000)
 - `OTEL_SERVICE_NAME` - Service name for resource attributes (default: klag)
 - `OTEL_RESOURCE_ATTRIBUTES` - Additional resource attributes (format: key1=value1,key2=value2)
+- `OTEL_EXPORTER_OTLP_CERTIFICATE` - Path to a PEM CA bundle the exporter additionally trusts (for an HTTPS collector with an internally-signed cert). Added on top of the JVM default trust, never replacing it, and scoped to the OTLP exporter (Kafka TLS is unaffected).
 
 *Custom Variables (override OTEL_* vars):*
 - `OTLP_ENDPOINT` - Direct endpoint URL (default: http://localhost:4318/v1/metrics)
 - `OTLP_STEP_MS` - Export interval in milliseconds (default: 60000)
 - `OTLP_HEADERS` - Authentication headers (format: key1=value1,key2=value2)
 - `OTLP_RESOURCE_ATTRIBUTES` - Resource attributes (format: key1=value1,key2=value2)
+- `OTLP_CA_CERT_PATH` (overrides `OTEL_EXPORTER_OTLP_CERTIFICATE`) - Path to a PEM CA bundle the exporter additionally trusts, for an HTTPS collector with an internally-signed cert. Trust is additive over the JVM defaults (never reduced). If set but the file is missing/empty/unparseable, OTLP registry creation fails fast rather than silently falling back to default trust.
 
-*Note:* Protocol is HTTP only (port 4318). Aggregation temporality is cumulative.
+*Note:* Protocol is HTTP only (port 4318); both `http://` and `https://` endpoints are supported (point `OTLP_CA_CERT_PATH` at the CA bundle for an internally-signed HTTPS collector). Aggregation temporality is cumulative.
 
 *Example for Grafana Cloud:*
 ```bash

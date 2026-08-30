@@ -121,6 +121,9 @@ validate_output "JAAS config from secret" "${TESTS_DIR}/test-values-sasl.yaml" "
 validate_output "OTLP_ENDPOINT set" "${TESTS_DIR}/test-values-otlp.yaml" "OTLP_ENDPOINT"
 validate_output "OTEL_SERVICE_NAME set" "${TESTS_DIR}/test-values-otlp.yaml" "OTEL_SERVICE_NAME"
 validate_output "OTLP secret created" "${TESTS_DIR}/test-values-otlp.yaml" "name: test-release-klag-otlp"
+validate_output "OTLP_CA_CERT_PATH set when caCertPath given" "${TESTS_DIR}/test-values-otlp.yaml" "OTLP_CA_CERT_PATH"
+validate_not_present "OTLP_CA_CERT_PATH absent when caCertPath empty" "${TESTS_DIR}/test-values-otlp.yaml" "OTLP_CA_CERT_PATH" "--set metrics.otlp.caCertPath="
+validate_not_present "OTLP_CA_CERT_PATH absent by default" "" "OTLP_CA_CERT_PATH"
 
 # Datadog config validation
 validate_output "DD_API_KEY set" "${TESTS_DIR}/test-values-datadog.yaml" "DD_API_KEY"
