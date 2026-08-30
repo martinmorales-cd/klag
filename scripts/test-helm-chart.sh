@@ -131,7 +131,10 @@ validate_output "Datadog secret created" "${TESTS_DIR}/test-values-datadog.yaml"
 # ServiceMonitor validation
 validate_output "ServiceMonitor created" "${TESTS_DIR}/test-values.yaml" "kind: ServiceMonitor"
 validate_output "ServiceMonitor scrapes /metrics" "${TESTS_DIR}/test-values.yaml" "path: /metrics"
+validate_output "ServiceMonitor metricRelabelings on endpoint" "${TESTS_DIR}/test-values.yaml" '^      metricRelabelings:'
+validate_output "ServiceMonitor relabelings on endpoint"       "${TESTS_DIR}/test-values.yaml" '^      relabelings:'
 validate_not_present "No ServiceMonitor by default" "" "kind: ServiceMonitor"
+validate_not_present "No metricRelabelings when unset" "" "metricRelabelings" "--set serviceMonitor.enabled=true"
 
 # Existing secret validation (should NOT create new secrets)
 validate_not_present "No Kafka secret when using existing" "${TESTS_DIR}/test-values-existing-secret.yaml" "name: test-release-klag-kafka"

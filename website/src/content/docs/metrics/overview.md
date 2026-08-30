@@ -47,7 +47,8 @@ series visible for one or two collection intervals.
 `klag.consumer.committed_offset` also carry `member_host`, `consumer_id`, and `client_id` tags
 identifying the consumer **instance** that owns each partition — handy for pinning lag to a
 specific pod. Unowned partitions (Empty/Dead groups) get empty-string values. Disable with
-`CONSUMER_MEMBER_LABELS_ENABLED=false` to cut cardinality. Topic-level `lag.ms` aggregates and
+`CONSUMER_MEMBER_LABELS_ENABLED=false` to cut cardinality (cheaper than Prometheus
+`labeldrop` of the same names, which still scrapes the series first). Topic-level `lag.ms` aggregates and
 partition-level `klag.partition.log_*_offset` metrics stay member-agnostic.
 
 ## Hot partitions

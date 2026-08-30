@@ -2,7 +2,7 @@ apiVersion: v2
 name: klag
 description: A Helm chart for Klag - A simple, lightweight Kafka Lag Exporter with pluggable metrics sinks.
 type: application
-version: 0.3.9
+version: 0.3.10
 appVersion: "0.2.14"
 home: https://github.com/themoah/klag
 icon: https://avatars.githubusercontent.com/themoah
@@ -34,6 +34,8 @@ annotations:
     - name: themoah
       email: aviv@dozorets.com
   artifacthub.io/changes: |
+    - kind: added
+      description: Expose serviceMonitor.metricRelabelings and serviceMonitor.relabelings so Prometheus Operator can rewrite labels without a second ServiceMonitor or a chart fork
     - kind: security
       description: Upgrade Micrometer to 1.16.6 (CVE-2026-40984 in micrometer-core; the 1.12 line is EOL and unpatched), which moves the Prometheus registry onto the Prometheus Java client 1.x and drops the EOL io.prometheus:simpleclient jars; scraped metric names, labels and values are unchanged
     - kind: changed
