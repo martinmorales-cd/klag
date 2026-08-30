@@ -178,22 +178,39 @@ export function resolveDocPath(input) {
  */
 export function prefersMarkdown(accept) {
   if (!accept) return false;
-  const quality = (type) => {
-    let best = -1;
-    for (const part of accept.split(',')) {
-      const [media, ...params] = part.trim().split(';').map((piece) => piece.trim());
-      if (media.toLowerCase() !== type) continue;
-      const q = params
-        .map((param) => param.match(/^q=([0-9.]+)$/i)?.[1])
-        .find((value) => value !== undefined);
-      best = Math.max(best, q === undefined ? 1 : Number(q));
-    }
-    return best;
-  };
-  const markdown = quality('text/markdown');
+
+  const ranges = accept.split(',').map((part) => {
+    const [media, ...params] = part.trim().split(';').map((piece) => piece.trim());
+    const q = params
+      .map((param) => param.match(/^q=([0-9.]+)$/i)?.[1])
+      .find((value) => value !== undefined);
+    return { media: media.toLowerCase(), q: q === undefined ? 1 : Number(q) };
+  });
+
+  // Markdown has to be asked for by name. A wildcard means "anything", which is already
+  // satisfied by the HTML we serve by default.
+  const markdown = Math.max(
+    -1,
+    ...ranges.filter((range) => range.media === 'text/markdown').map((range) => range.q),
+  );
   if (markdown <= 0) return false;
-  return markdown >= quality('text/html');
+
+  // HTML, though, is matched by `text/*` and `*/*` too: under `text/markdown;q=0.5,
+  // */*;q=0.8` the client wants HTML. Only the most specific matching range counts, so a
+  // low `text/html;q=0.2` is not rescued by a bare `*/*` later in the header.
+  let html = -1;
+  for (const specificity of ['text/html', 'text/*', '*/*']) {
+    const matches = ranges.filter((range) => range.media === specificity);
+    if (matches.length) {
+      html = Math.max(...matches.map((range) => range.q));
+      break;
+    }
+  }
+
+  // Ties go to markdown: the client named it explicitly and HTML only matched a wildcard.
+  return markdown >= html;
 }
+
 
 function textResult(value) {
   return { content: [{ type: 'text', text: value }] };

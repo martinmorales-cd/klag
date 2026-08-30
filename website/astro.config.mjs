@@ -17,11 +17,14 @@ const head = [
     tag: 'meta',
     attrs: { name: 'robots', content: 'index, follow, max-image-preview:large' },
   },
-  // GEO: advertise the machine-readable docs corpus (llms.txt convention) and the
-  // per-page markdown twin, so an agent can take the .md instead of parsing HTML.
+  // GEO: advertise the machine-readable docs corpus (llms.txt convention). This head is
+  // site-wide, so it can only name the corpus index — rel="index", not rel="alternate",
+  // which would claim /llms.txt is a rendering of whichever page you happen to be on.
+  // The per-page .md twin is advertised as rel="alternate" in the Worker's Link header
+  // (see discoveryLinks in src/worker.ts), where the request path is known.
   {
     tag: 'link',
-    attrs: { rel: 'alternate', type: 'text/markdown', href: '/llms.txt', title: 'llms.txt' },
+    attrs: { rel: 'index', type: 'text/markdown', href: '/llms.txt', title: 'llms.txt' },
   },
   // Agent discovery: the ARD catalog lists the MCP server, skills, and OpenAPI spec.
   {

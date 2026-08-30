@@ -63,8 +63,9 @@ export async function generateSkills({
     const name = data.name
       ?? (isCommand ? `klag:${relPath.replace(/^commands\//, '').replace(/\.md$/, '')}` : null);
     // Reference files under skills/*/references/ are support material the skill links
-    // to. Serve them so those links resolve, but keep them out of the index.
-    if (!name) continue;
+    // to. Serve them so those links resolve, but keep them out of the index — a name in
+    // their frontmatter would otherwise publish one as an installable skill.
+    if (!name || /(^|\/)references\//.test(servePath)) continue;
 
     entries.push({
       name,

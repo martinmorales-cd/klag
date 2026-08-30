@@ -84,7 +84,11 @@ before(async () => {
   ]);
   await writeFile(join(docsDir, 'fixture.mdx'), fixture, 'utf8');
   const generator = await import(pathToFileURL(generatorPath).href);
-  await generator.generateLlms({ docsDir, outputDir });
+  await generator.generateLlms({
+    docsDir,
+    outputDir,
+    generatedDir: join(sandboxRoot, 'generated'),
+  });
   [index, full] = await Promise.all([
     readFile(join(outputDir, 'llms.txt'), 'utf8'),
     readFile(join(outputDir, 'llms-full.txt'), 'utf8'),
@@ -177,6 +181,9 @@ test('parameterized generation leaves production docs and outputs unchanged', as
   const productionOutputs = [
     join(publicDir, 'llms.txt'),
     join(publicDir, 'llms-full.txt'),
+    // docs.json is what the Worker's MCP tools import. An isolated run that rewrote it
+    // would leave the live corpus holding this test's fixture page.
+    join(websiteRoot, 'src', 'generated', 'docs.json'),
   ];
   const snapshots = await Promise.all(productionOutputs.map(readOptional));
 
@@ -191,7 +198,11 @@ test('parameterized generation leaves production docs and outputs unchanged', as
     const moduleUrl = `${pathToFileURL(generatorPath).href}?test=${Date.now()}`;
     const generator = await import(moduleUrl);
     assert.equal(typeof generator.generateLlms, 'function');
-    await generator.generateLlms({ docsDir, outputDir });
+    await generator.generateLlms({
+      docsDir,
+      outputDir,
+      generatedDir: join(isolatedRoot, 'generated'),
+    });
 
     const isolatedFull = await readFile(
       join(outputDir, 'llms-full.txt'),
@@ -228,6 +239,7 @@ test('production corpus generates portable output with critical operational fact
     const generated = await generator.generateLlms({
       docsDir: productionDocsDir,
       outputDir,
+      generatedDir: join(isolatedRoot, 'generated'),
     });
     const generatedFiles = await Promise.all([
       readFile(join(outputDir, 'llms.txt'), 'utf8'),

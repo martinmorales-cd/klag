@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -47,6 +47,39 @@ test('agent-skills index digests match the served skill files', async () => {
     const published = JSON.parse(await readFile(join(outputDir, 'openapi.json'), 'utf8'));
     assert.equal(published.info.version, appVersion);
   } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+// Reference files are support material a skill links to. They must still be served so
+// those links resolve, but an agent reading the index must not be offered one as an
+// installable skill. The real references carry no frontmatter, so this builds a fixture
+// where one does -- that is the case the name check alone would let through.
+test('reference files are served but kept out of the discovery index', async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), 'klag-plugin-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'klag-skills-'));
+
+  try {
+    await mkdir(join(fixtureDir, 'skills', 'klag', 'references'), { recursive: true });
+    // generateSkills walks both trees; the real plugin always has commands/.
+    await mkdir(join(fixtureDir, 'commands'), { recursive: true });
+    await writeFile(
+      join(fixtureDir, 'skills', 'klag', 'SKILL.md'),
+      '---\nname: klag\ndescription: Set up Klag.\n---\n\nBody.\n',
+    );
+    await writeFile(
+      join(fixtureDir, 'skills', 'klag', 'references', 'deploy-targets.md'),
+      '---\nname: deploy-targets\ndescription: Support material.\n---\n\nBody.\n',
+    );
+    await writeFile(join(outputDir, 'openapi.json'), JSON.stringify({ info: { version: '0' } }));
+
+    const index = await generateSkills({ pluginDir: fixtureDir, outputDir });
+
+    assert.deepEqual(index.skills.map((skill) => skill.name), ['klag']);
+    // Served, so the skill's own links to it still resolve.
+    await readFile(join(outputDir, 'skills', 'klag', 'references', 'deploy-targets.md'));
+  } finally {
+    await rm(fixtureDir, { recursive: true, force: true });
     await rm(outputDir, { recursive: true, force: true });
   }
 });

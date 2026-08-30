@@ -14,6 +14,7 @@ import {
   RESOURCES,
   callTool,
   prefersMarkdown,
+  resolveDocPath,
 } from './mcp-docs.mjs';
 
 interface Env {
@@ -150,13 +151,30 @@ async function dispatchMcp(
   }
 }
 
-// Agents that land on a page from web search, before reading llms.txt.
+// Agents that land on a page from web search, before reading llms.txt. llms.txt is the
+// whole-corpus index, so it is rel="index" — rel="alternate" is reserved for the current
+// page's own markdown twin, added per request by discoveryLinks().
 const DISCOVERY_LINKS = [
-  `<${SITE}/llms.txt>; rel="alternate"; type="text/markdown"; title="llms.txt"`,
+  `<${SITE}/llms.txt>; rel="index"; type="text/markdown"; title="llms.txt"`,
   `<${SITE}/.well-known/ai-catalog.json>; rel="service-desc"; type="application/json"`,
   `<${SITE}/openapi.json>; rel="service-desc"; type="application/json"`,
   `<${SITE}/mcp>; rel="related"; title="Klag docs MCP server"`,
 ].join(', ');
+
+// The markdown twin gen-llms emits for a page: / -> /index.md, /about/ -> /about.md.
+function markdownTwin(path: string) {
+  return path === '/' ? '/index.md' : `${path.replace(/\/$/, '')}.md`;
+}
+
+// rel="alternate" means "this same document, other format", so it has to name the page's
+// own twin. Only corpus pages have one — resolveDocPath returns null for everything else
+// (404s, assets), which then gets the static set with no alternate at all.
+function discoveryLinks(path: string) {
+  const canonical = resolveDocPath(path);
+  if (!canonical) return DISCOVERY_LINKS;
+  const twin = `<${SITE}${markdownTwin(canonical)}>; rel="alternate"; type="text/markdown"`;
+  return `${twin}, ${DISCOVERY_LINKS}`;
+}
 
 function withHeaders(
   response: Response,
@@ -188,8 +206,7 @@ export default {
     // Cold-discovery path: an agent asking for markdown gets the .md twin of the page.
     if (request.method === 'GET' && !path.endsWith('.md')
         && prefersMarkdown(request.headers.get('accept'))) {
-      const twin = path === '/' ? '/index.md' : `${path.replace(/\/$/, '')}.md`;
-      const markdown = await env.ASSETS.fetch(new Request(new URL(twin, url), request));
+      const markdown = await env.ASSETS.fetch(new Request(new URL(markdownTwin(path), url), request));
       if (markdown.ok) return withHeaders(markdown, 'text/markdown; charset=utf-8');
     }
 
@@ -212,7 +229,7 @@ export default {
     }
     if ((response.headers.get('content-type') ?? '').includes('text/html')) {
       return withHeaders(response, null, {
-        link: DISCOVERY_LINKS,
+        link: discoveryLinks(path),
         // Content Signals: klag.dev is open documentation — search, AI input, and
         // training are all welcome. Mirrors public/robots.txt.
         'content-signal': 'search=yes, ai-input=yes, ai-train=yes',

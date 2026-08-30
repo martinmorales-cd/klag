@@ -148,3 +148,17 @@ test('markdown negotiation respects q-values', () => {
   assert.equal(prefersMarkdown(null), false);
   assert.equal(prefersMarkdown(''), false);
 });
+
+test('markdown negotiation resolves wildcard ranges by specificity', () => {
+  // HTML matches */* at 0.8 here, so this header asks for HTML despite naming markdown.
+  assert.equal(prefersMarkdown('text/markdown;q=0.5, */*;q=0.8'), false);
+  assert.equal(prefersMarkdown('text/markdown;q=0.5, text/*;q=0.8'), false);
+  // Ties go to markdown: the caller named it explicitly.
+  assert.equal(prefersMarkdown('text/markdown;q=0.8, */*;q=0.8'), true);
+  assert.equal(prefersMarkdown('text/markdown, */*;q=0.8'), true);
+  // An exact text/html range wins over a looser one regardless of q ordering.
+  assert.equal(prefersMarkdown('text/markdown;q=0.9, text/html;q=0.2, */*'), true);
+  assert.equal(prefersMarkdown('text/markdown;q=0.2, text/html;q=0.9, */*;q=0.1'), false);
+  // A bare wildcard expresses no markdown preference at all.
+  assert.equal(prefersMarkdown('*/*'), false);
+});

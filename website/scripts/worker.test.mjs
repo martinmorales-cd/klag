@@ -56,3 +56,37 @@ test('an asset-fetch failure becomes a JSON-RPC error, not a Worker 500', async 
   // The upstream message stays in the Worker log, not in the client-visible envelope.
   assert.equal(body.error.message, 'Internal error');
 });
+
+// A stub HTML page, so the Link header logic runs the way it does for a real docs page.
+const htmlEnv = () =>
+  envWith(async () => new Response('<html></html>', {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  }));
+
+const linkHeaderFor = async (path) => {
+  const response = await worker.fetch(
+    new Request(`https://klag.dev${path}`, { headers: { accept: 'text/html' } }),
+    htmlEnv(),
+  );
+  return response.headers.get('link') ?? '';
+};
+
+test('rel="alternate" names the page\'s own markdown twin, not the corpus index', async () => {
+  const link = await linkHeaderFor('/ai/mcp/');
+  assert.match(link, /<https:\/\/klag\.dev\/ai\/mcp\.md>; rel="alternate"/);
+  // llms.txt is the whole-corpus index; calling it an alternate of this page is the bug.
+  assert.doesNotMatch(link, /llms\.txt>; rel="alternate"/);
+  assert.match(link, /<https:\/\/klag\.dev\/llms\.txt>; rel="index"/);
+});
+
+test('the homepage twin is /index.md', async () => {
+  assert.match(await linkHeaderFor('/'), /<https:\/\/klag\.dev\/index\.md>; rel="alternate"/);
+});
+
+test('a path outside the corpus advertises no alternate', async () => {
+  // Nothing generated a twin for it, so pointing at one would be a dead link.
+  const link = await linkHeaderFor('/not-a-real-page/');
+  assert.doesNotMatch(link, /rel="alternate"/);
+  assert.match(link, /rel="service-desc"/);
+});
