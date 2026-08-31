@@ -35,16 +35,14 @@ public record MetricsConfig(
   }
 
   /**
-   * Loads configuration from environment variables.
+   * Loads configuration from environment variables and JVM system properties.
    */
   public static MetricsConfig fromEnvironment() {
-    String reporter = System.getenv().getOrDefault("METRICS_REPORTER", DEFAULT_REPORTER);
+    String reporter = Env.getString("METRICS_REPORTER", DEFAULT_REPORTER);
     long interval = Env.getLong("METRICS_INTERVAL_MS", DEFAULT_INTERVAL_MS);
-    String filter = System.getenv().getOrDefault("METRICS_GROUP_FILTER", DEFAULT_FILTER);
-    String exclude = System.getenv().getOrDefault("METRICS_GROUP_EXCLUDE", DEFAULT_EXCLUDE);
-    boolean jvmEnabled = Boolean.parseBoolean(
-      System.getenv().getOrDefault("METRICS_JVM_ENABLED", "false")
-    );
+    String filter = Env.getString("METRICS_GROUP_FILTER", DEFAULT_FILTER);
+    String exclude = Env.getString("METRICS_GROUP_EXCLUDE", DEFAULT_EXCLUDE);
+    boolean jvmEnabled = Env.getBool("METRICS_JVM_ENABLED", false);
     double lagTrendDeadband = Env.getDouble("LAG_TREND_DEADBAND_MSG_PER_SEC",
       DEFAULT_LAG_TREND_DEADBAND);
 

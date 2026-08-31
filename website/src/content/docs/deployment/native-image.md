@@ -46,8 +46,9 @@ settings support the exact name and a dotted lowercase alias, such as
 ./build/native/nativeCompile/klag -Dhttp.port=8881
 ```
 
-Reporter integrations, Kafka forwarding, MCP, and other environment-only settings do
-not gain `-D` support in a native build. Logging is a separate exception: Logback
+Reporter-specific integration settings (`DD_*`, `OTLP_*`, and `OTEL_*`), Kafka
+forwarding, MCP, and other environment-only settings do not gain `-D` support in a
+native build. Logging is a separate exception: Logback
 accepts exact-name properties such as `-DLOG_LEVEL=DEBUG`, but not dotted aliases such
 as `-Dlog.level`. See the
 [configuration reference](/configuration/reference/#application) for the full

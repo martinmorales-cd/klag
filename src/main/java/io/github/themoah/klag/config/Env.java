@@ -33,6 +33,11 @@ public final class Env {
     return System.getProperty(name.toLowerCase(java.util.Locale.ROOT).replace('_', '.'));
   }
 
+  public static String getString(String name, String defaultValue) {
+    String value = resolve(name);
+    return value == null || value.isBlank() ? defaultValue : value;
+  }
+
   public static int getInt(String name, int defaultValue) {
     String value = resolve(name);
     if (value == null || value.isBlank()) {
