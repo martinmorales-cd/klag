@@ -20,14 +20,16 @@ resolve in this order: environment variable `NAME` → `-DNAME` → dotted
 
 - `HTTP_PORT`, `KAFKA_HEALTH_CHECK_INTERVAL_MS`
 - `KAFKA_CHUNK_COUNT`, `KAFKA_CHUNK_DELAY_MS`
-- `METRICS_INTERVAL_MS`, `CONSUMER_MEMBER_LABELS_ENABLED`,
-  `LAG_TREND_DEADBAND_MSG_PER_SEC`
+- `METRICS_REPORTER`, `METRICS_INTERVAL_MS`, `METRICS_GROUP_FILTER`,
+  `METRICS_GROUP_EXCLUDE`, `METRICS_JVM_ENABLED`,
+  `CONSUMER_MEMBER_LABELS_ENABLED`, `LAG_TREND_DEADBAND_MSG_PER_SEC`
 - all `HOT_PARTITION_*` and `TIME_LAG_*` settings listed below
 - `COMMIT_FRESHNESS_ENABLED`, `ISR_ENABLED`
 
-Kafka forwarding, `KLAG_CONFIG_FILE`, Vert.x, reporter integrations, and MCP read
-environment variables directly and do not use that `-D` resolution chain. Logging is a
-separate exception: Logback can resolve exact-name JVM properties such as
+Kafka forwarding, `KLAG_CONFIG_FILE`, Vert.x, MCP, and reporter-specific integration
+settings such as `DD_*`, `OTLP_*`, and `OTEL_*` read environment variables directly and
+do not use that `-D` resolution chain. Logging is a separate exception: Logback can
+resolve exact-name JVM properties such as
 `-DLOG_LEVEL=DEBUG`, but it does not provide `Env`-style dotted aliases such as
 `-Dlog.level`.
 
@@ -72,6 +74,11 @@ For SASL/SSL, common settings include `KAFKA_SECURITY_PROTOCOL`,
 | `LAG_TREND_DEADBAND_MSG_PER_SEC` | `1.0` | STABLE band for the MCP lag-trend classifier. |
 | `COMMIT_FRESHNESS_ENABLED` | `true` | Track inferred time since a lagging group/topic's committed-offset sum last changed. |
 | `ISR_ENABLED` | `true` | Detect and report under-replicated partitions. |
+
+Every setting in this table supports an environment variable, an exact-name JVM
+property, and a dotted JVM property. For example, the reporter can be selected with
+`METRICS_REPORTER=prometheus`, `-DMETRICS_REPORTER=prometheus`, or
+`-Dmetrics.reporter=prometheus`, in that precedence order.
 
 A group is monitored **iff** it matches any include segment **and** no exclude segment.
 See [Group Filtering](/configuration/group-filtering/).

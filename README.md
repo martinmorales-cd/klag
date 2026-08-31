@@ -137,10 +137,12 @@ most common:
 | `METRICS_GROUP_FILTER` | `*` | Comma-separated glob patterns. A group is included if it matches any segment (e.g. `ingest*,categorize*`). |
 | `METRICS_GROUP_EXCLUDE` | _(empty)_ | Comma-separated glob patterns to exclude even if included by the filter (e.g. `debug-*,canary-*,*-shadow`). |
 
-Any variable can also be set as a JVM system property — `-DNAME` or its dotted-lowercase
-form `-Dname.dotted` (e.g. `HTTP_PORT` → `-Dhttp.port=8881`) — useful when running the jar
-or native binary directly. Env vars take precedence. This works on the GraalVM native
-binary too (runtime `-D` flags).
+Any `Env`-backed variable can also be set as a JVM system property — `-DNAME` or its
+dotted-lowercase form `-Dname.dotted` (e.g. `HTTP_PORT` → `-Dhttp.port=8881`) — useful
+when running the jar or native binary directly. Env vars take precedence. This works on
+the GraalVM native binary too (runtime `-D` flags). See the
+[configuration reference](website/src/content/docs/configuration/reference.md) for the
+complete list of `Env`-backed settings.
 
 See [CLAUDE.md](CLAUDE.md) for the complete configuration reference.
 
