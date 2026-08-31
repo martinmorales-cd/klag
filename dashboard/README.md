@@ -11,6 +11,7 @@ Consumer lag counts how far a consumer group trails the latest produced offset. 
 - **Consumer group state** tracking: Stable, Rebalancing, Dead
 - **Partition & offset** detail: per-partition lag, log offsets, topic throughput
 - **Hot partition detection** flags skewed partitions via statistical outliers
+- **Topic data skew** scores uneven retained size across partitions (opt-in `DATA_SKEW_ENABLED`)
 - **Time-based lag** in milliseconds plus estimated time to catch up
 - **Data Loss Prevention** shows % of retention consumed and at-risk topics
 - **JVM metrics**: heap, GC pause, threads, CPU

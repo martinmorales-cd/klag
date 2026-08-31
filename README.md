@@ -112,6 +112,7 @@ and [charts/klag/README.md](charts/klag/README.md).
 | `klag.consumer.lag.retention_percent` | Lag as % of available messages (data loss alerting) |
 | `klag.consumer.group.state` | Group health: stable, preparing/completing_rebalance (assigning/reconciling on KIP-848 groups), dead, empty |
 | `klag.hot_partition[.lag]` | Partitions with statistically abnormal throughput         |
+| `klag.topic.size_skew` | Topic retained-size imbalance (max/mean × 100; opt-in `DATA_SKEW_ENABLED`) |
 | `klag.partition.under_replicated` | Partitions with fewer in-sync replicas than configured (ISR gap) |
 
 Full metrics reference and the pre-built [Grafana dashboard](https://klag.dev/integrations/grafana-dashboard/)

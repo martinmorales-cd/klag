@@ -24,7 +24,7 @@ resolve in this order: environment variable `NAME` → `-DNAME` → dotted
   `METRICS_GROUP_EXCLUDE`, `METRICS_JVM_ENABLED`,
   `CONSUMER_MEMBER_LABELS_ENABLED`, `LAG_TREND_DEADBAND_MSG_PER_SEC`
 - all `HOT_PARTITION_*` and `TIME_LAG_*` settings listed below
-- `COMMIT_FRESHNESS_ENABLED`, `ISR_ENABLED`
+- `COMMIT_FRESHNESS_ENABLED`, `ISR_ENABLED`, `DATA_SKEW_ENABLED`, `DATA_SKEW_MIN_PARTITIONS`
 
 Kafka forwarding, `KLAG_CONFIG_FILE`, Vert.x, MCP, and reporter-specific integration
 settings such as `DD_*`, `OTLP_*`, and `OTEL_*` read environment variables directly and
@@ -74,6 +74,8 @@ For SASL/SSL, common settings include `KAFKA_SECURITY_PROTOCOL`,
 | `LAG_TREND_DEADBAND_MSG_PER_SEC` | `1.0` | STABLE band for the MCP lag-trend classifier. |
 | `COMMIT_FRESHNESS_ENABLED` | `true` | Track inferred time since a lagging group/topic's committed-offset sum last changed. |
 | `ISR_ENABLED` | `true` | Detect and report under-replicated partitions. |
+| `DATA_SKEW_ENABLED` | `false` | Score retained-size imbalance across a topic's partitions (`klag.topic.size_skew`). Opt-in. |
+| `DATA_SKEW_MIN_PARTITIONS` | `2` | Min partitions per topic before a size-skew score is emitted. |
 
 Every setting in this table supports an environment variable, an exact-name JVM
 property, and a dotted JVM property. For example, the reporter can be selected with
@@ -88,8 +90,9 @@ partitions. Any change, including a rewind, resets its clock. Caught-up periods 
 the tracking baseline; it is established again when lag resumes. Restarting Klag also
 resets observation.
 
-See [Metrics Overview](/metrics/overview/) for commit-staleness semantics and
-[ISR Monitoring](/metrics/isr/) for the under-replicated-partition metric.
+See [Metrics Overview](/metrics/overview/) for commit-staleness semantics,
+[ISR Monitoring](/metrics/isr/) for the under-replicated-partition metric, and
+[Topic Data Skew](/metrics/data-skew/) for the opt-in size-skew score.
 
 ## Hot partition detection
 

@@ -1,6 +1,6 @@
 ---
 title: Metrics Overview
-description: The full catalog of metrics Klag exposes, covering consumer lag, offsets, group state, velocity, hot partitions, time-based lag, and data-loss prevention.
+description: The full catalog of metrics Klag exposes, covering consumer lag, offsets, group state, velocity, hot partitions, time-based lag, data-loss prevention, ISR, and topic data skew.
 ---
 
 Klag exports its metrics through Micrometer, so the exact name format depends on the
@@ -67,6 +67,14 @@ Reported **only when a partition is under-replicated** (see [ISR Monitoring](/me
 | Metric | Description |
 |---|---|
 | `klag.partition.under_replicated` | Missing in-sync replica count (`replicaCount - inSyncReplicaCount`). Tags: `topic`, `partition` only. |
+
+## Topic data skew
+
+Opt-in via `DATA_SKEW_ENABLED` (default `false`). See [Topic Data Skew](/metrics/data-skew/):
+
+| Metric | Description |
+|---|---|
+| `klag.topic.size_skew` | `max/mean` retained-size ratio × 100 (`retained = max(0, logEndOffset − logStartOffset)`). Tags: `topic` only. 100 = even; 200 = fullest partition holds 2× the average. |
 
 ## Time-based lag
 

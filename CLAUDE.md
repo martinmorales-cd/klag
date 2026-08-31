@@ -55,6 +55,7 @@ src/main/java/io/github/themoah/klag/
 ├── metrics/                   # MetricsCollector, MicrometerReporter, PrometheusHandler
 │   ├── velocity/              # LagVelocityTracker, TopicLagHistory
 │   ├── hotpartition/          # HotPartitionDetector, HotPartitionConfig, StatisticalUtils
+│   ├── dataskew/              # DataSkewDetector, DataSkewConfig
 │   └── timelag/               # TimeLagEstimator, TimeLagConfig, OffsetTimestampTracker, PartitionOffsetHistory
 └── model/                     # Records: ConsumerGroupLag, ConsumerGroupState, PartitionOffsets, LagVelocity, etc.
 ```
@@ -160,6 +161,10 @@ Any `Env`-backed variable resolves in order (first non-blank wins): env var `NAM
 **ISR (In-Sync Replica) Monitoring:**
 - `ISR_ENABLED` (true) - Detect and report under-replicated partitions (replica count > ISR count). Uses topic/partition metadata already fetched every cycle (`describeTopics`) — no additional Kafka calls or ACLs beyond what klag already requires.
 
+**Topic data skew (opt-in):**
+- `DATA_SKEW_ENABLED` (false) - Score retained-size imbalance across a topic's partitions as `max/mean` of `logEndOffset − logStartOffset`. No extra Kafka calls. When off: no gauges, no MCP diagnose findings.
+- `DATA_SKEW_MIN_PARTITIONS` (2) - Minimum partitions per topic before a score is emitted.
+
 **MCP (AI agent access):**
 - `MCP_ENABLED` (false) - Expose the `/mcp` endpoint for AI agents (SRE/dev). Opt-in; zero impact when off.
 - `MCP_AUTH_TOKEN` (empty) - When set, requires `Authorization: Bearer <token>`. Empty = open (logged warning).
@@ -175,8 +180,9 @@ Each group snapshot also carries a **basic lag trend** (`growing`/`shrinking`/`s
 `overallTrend` rollup, derived from lag velocity via `LAG_TREND_DEADBAND_MSG_PER_SEC`) and a rolling
 **state-change history** (last 10 `from→to` transitions). `get_consumer_group_lag` returns `trends`,
 `overallTrend`, and `recentTransitions`; `list_consumer_groups`/`find_lagging_groups` include
-`overallTrend`; `diagnose` flags frequent state changes (rebalance storm / flapping) and **stuck
-consumers** (lag > 0 but committed offset frozen). `get_consumer_group_lag`/`find_lagging_groups`
+`overallTrend`; `diagnose` flags frequent state changes (rebalance storm / flapping), **stuck
+consumers** (lag > 0 but committed offset frozen), and **size skew** on consumed topics
+(ratio ≥ 2.0 when `DATA_SKEW_ENABLED`). `get_consumer_group_lag`/`find_lagging_groups`
 also expose `commitStalenessSeconds` (max across the group's lagging topics; -1 when none).
 See `docs/superpowers/specs/2026-06-01-mcp-support-design.md`.
 
@@ -245,8 +251,12 @@ OTEL_RESOURCE_ATTRIBUTES=environment=development,cluster=local
 **ISR Metrics (conditional - only reported when a partition is under-replicated):**
 - `klag.partition.under_replicated` - Count of missing in-sync replicas (`replicaCount - inSyncReplicaCount`) for a partition currently under-replicated. Detects fault-tolerance loss (isr.size() < replicas.size()); does not compare against `min.insync.replicas`.
 
+**Topic data skew (opt-in — only when `DATA_SKEW_ENABLED=true`):**
+- `klag.topic.size_skew` - `max(retained) / mean(retained)` × 100 per topic, where `retained = max(0, logEndOffset − logStartOffset)`. 100 = even; 200 = fullest partition holds 2× the average. Tags: `topic` only. Topics with fewer than `DATA_SKEW_MIN_PARTITIONS` partitions are skipped; all-empty topics score 100. Complementary to hot partitions (produce-rate outliers vs stored-size imbalance). MCP `diagnose` warns at ratio ≥ 2.0.
+
 Note: `klag.hot_partition` only has `topic` and `partition` tags (throughput is partition-level, independent of consumers)
 Note: `klag.partition.under_replicated` only has `topic` and `partition` tags (ISR status is partition-level, independent of consumers)
+Note: `klag.topic.size_skew` only has a `topic` tag (retained-size skew is topic-level, independent of consumers). Gauge is stored ×100; Grafana divides by 100.
 Note: `klag.consumer.lag.time_to_close_seconds` has only `consumer_group` and `topic` tags (per-topic granularity, trend metric)
 Note: `klag.consumer.lag.ms` and `klag.consumer.lag.retention_percent` have `consumer_group`+`topic` for the aggregate series and additionally `partition` for the per-partition series (aggregate = topic-level max, no `partition` tag; select rollups with `{partition=""}`, per-partition with `{partition!=""}`). Per-partition `klag.consumer.lag.ms` also has member labels when enabled.
 Note: Commit freshness metric only has `consumer_group` and `topic` tags (per-topic granularity)
@@ -276,6 +286,7 @@ A pre-built comprehensive Grafana dashboard is available in `dashboard/demo-dash
 - Topic throughput (log end offset rate)
 - Top 10 partition offset gaps
 - Hot Partition Detection (count, table, time series)
+- Topic Data Skew (max ratio, per-topic table/time series, retained messages by partition; requires `DATA_SKEW_ENABLED`)
 - Under-Replicated Partitions (ISR) (count, table, time series)
 - Time-Based Lag Estimation (max time lag, groups catching up, time lag chart, time-to-close chart)
 - Commit Staleness by Consumer Group (seconds since last observed commit, while lagging)

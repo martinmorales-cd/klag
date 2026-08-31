@@ -6,6 +6,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.StateTransition;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.TopicSizeSkew;
 import io.github.themoah.klag.model.UnderReplicatedPartition;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +56,9 @@ public final class Diagnoser {
   // Commit staleness (seconds) at/above which a lagging group is flagged as a stuck consumer.
   // The raw klag.consumer.commit.staleness_seconds gauge supports alerting at any threshold.
   private static final long STUCK_STALENESS_SECONDS = 300;
+  // Size-skew max/mean ratio at/above which a consumed topic is flagged. Alert on
+  // klag.topic.size_skew at any threshold; diagnose uses 2.0 (fullest partition holds 2x the mean).
+  private static final double SIZE_SKEW_WARN_RATIO = 2.0;
 
   /**
    * Diagnoses a consumer group.
@@ -72,6 +76,7 @@ public final class Diagnoser {
     addVelocityFindings(g, findings);
     addHotPartitionFinding(g, findings);
     addStuckConsumerFinding(g, findings);
+    addSizeSkewFinding(g, findings);
 
     Severity overall = findings.stream()
       .map(Finding::severity)
@@ -192,6 +197,18 @@ public final class Diagnoser {
           + "hung, deadlocked, or stuck on a poison message — its members appear alive but are "
           + "making no progress. (Staleness is measured since klag observed the last commit; it "
           + "resets on klag restart.)", g.totalLag(), staleness)));
+    }
+  }
+
+  private static void addSizeSkewFinding(GroupSnapshot g, List<Finding> findings) {
+    for (TopicSizeSkew skew : g.sizeSkews()) {
+      if (skew.ratio() >= SIZE_SKEW_WARN_RATIO) {
+        findings.add(new Finding(Severity.WARNING, "Size skew on " + skew.topic(),
+          String.format(Locale.ROOT,
+            "Topic %s has retained-size skew %.2f (fullest partition holds %.2f× the average). "
+            + "Uneven partition keys, compaction, or idle partitions leave some partitions much "
+            + "fuller than others.", skew.topic(), skew.ratio(), skew.ratio())));
+      }
     }
   }
 

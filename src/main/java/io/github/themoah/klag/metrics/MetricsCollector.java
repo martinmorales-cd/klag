@@ -6,6 +6,8 @@ import io.github.themoah.klag.kafka.ChunkProcessor;
 import io.github.themoah.klag.kafka.KafkaClientService;
 import io.github.themoah.klag.metrics.freshness.CommitFreshnessConfig;
 import io.github.themoah.klag.metrics.freshness.CommitFreshnessTracker;
+import io.github.themoah.klag.metrics.dataskew.DataSkewConfig;
+import io.github.themoah.klag.metrics.dataskew.DataSkewDetector;
 import io.github.themoah.klag.metrics.hotpartition.HotPartitionConfig;
 import io.github.themoah.klag.metrics.hotpartition.HotPartitionDetector;
 import io.github.themoah.klag.metrics.snapshot.SnapshotBuilder;
@@ -32,6 +34,7 @@ import io.github.themoah.klag.model.MetricsSnapshot.GroupSnapshot;
 import io.github.themoah.klag.model.PartitionOffsets;
 import io.github.themoah.klag.model.RetentionRisk;
 import io.github.themoah.klag.model.TimeToCloseEstimate;
+import io.github.themoah.klag.model.TopicSizeSkew;
 import io.github.themoah.klag.model.UnderReplicatedPartition;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -71,6 +74,7 @@ public class MetricsCollector {
   private final OffsetTimestampTracker offsetTimestampTracker;
   private final CommitFreshnessTracker commitFreshnessTracker;  // null when disabled
   private final boolean isrEnabled;
+  private final DataSkewConfig dataSkewConfig;
   private final ChunkConfig chunkConfig;
   private final int maxConcurrentGroups;
 
@@ -175,6 +179,7 @@ public class MetricsCollector {
       ? new CommitFreshnessTracker()
       : null;
     this.isrEnabled = IsrConfig.fromEnvironment().enabled();
+    this.dataSkewConfig = DataSkewConfig.fromEnvironment();
     this.chunkConfig = chunkConfig;
     this.maxConcurrentGroups = Math.max(1,
       Env.getInt(ENV_MAX_CONCURRENT_GROUPS, DEFAULT_MAX_CONCURRENT_GROUPS));
@@ -467,6 +472,13 @@ public class MetricsCollector {
       reporter.reportUnderReplicatedPartitions(underReplicated, activeKeys);
     }
 
+    List<TopicSizeSkew> sizeSkews = dataSkewConfig.enabled()
+      ? calculateTopicSizeSkew(topicPartitions.keySet())
+      : List.of();
+    if (!sizeSkews.isEmpty()) {
+      reporter.reportTopicSizeSkew(sizeSkews, activeKeys);
+    }
+
     // Aggregate partition data by topic for velocity tracking
     Map<String, Map<String, TopicAggregates>> groupTopicAggregates = new HashMap<>();
     for (ConsumerGroupLag group : lagData) {
@@ -571,7 +583,7 @@ public class MetricsCollector {
       }
       MetricsSnapshot partial = SnapshotBuilder.build(0L, lagData, stateData, velocities,
         lagMsData, timeToCloseEstimates, retentionRisks, hotByLag, hotByThroughput,
-        transitionsByGroup, lagTrendDeadband, stalenessByGroup, underReplicated);
+        transitionsByGroup, lagTrendDeadband, stalenessByGroup, underReplicated, sizeSkews);
       cycleSnapshot.groups.addAll(partial.groups());
       cycleSnapshot.throughput.addAll(hotByThroughput);
     }
@@ -857,6 +869,30 @@ public class MetricsCollector {
     }
     if (!result.isEmpty()) {
       log.debug("Detected {} under-replicated partitions", result.size());
+    }
+    return result;
+  }
+
+  /**
+   * Scores retained-size skew for topics observed this chunk, using offsets already fetched by
+   * {@link #getLogEndOffsetsCached}. No new Kafka calls.
+   *
+   * @param topics topics to score (this chunk's {@code topicPartitions.keySet()})
+   * @return size-skew scores (empty when none eligible or data not yet resolved)
+   */
+  private List<TopicSizeSkew> calculateTopicSizeSkew(Set<String> topics) {
+    List<PartitionOffsets> offsets = new ArrayList<>();
+    for (String topic : topics) {
+      Future<List<PartitionOffsets>> future = cycleTopicOffsets.get(topic);
+      if (future == null || !future.succeeded()) {
+        log.debug("Skipping size-skew check for topic {}: offset metadata unavailable this cycle", topic);
+        continue;
+      }
+      offsets.addAll(future.result());
+    }
+    List<TopicSizeSkew> result = DataSkewDetector.detect(offsets, dataSkewConfig.minPartitions());
+    if (!result.isEmpty()) {
+      log.debug("Calculated size skew for {} topics", result.size());
     }
     return result;
   }
