@@ -7,13 +7,13 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "node scripts/gen-llms.mjs && astro build",
+    "build": "astro build && node scripts/gen-llms.mjs && node scripts/gen-skills.mjs",
     "preview": "npm run build && wrangler dev",
     "astro": "astro",
-    "check": "astro check",
+    "check": "node scripts/gen-llms.mjs && wrangler types && astro check",
     "gen:llms": "node scripts/gen-llms.mjs",
+    "gen:og": "node scripts/gen-og.mjs",
     "test": "node --test scripts/*.test.mjs",
-    "deploy": "npm run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

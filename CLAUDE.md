@@ -85,6 +85,43 @@ fixed by ACL or `METRICS_GROUP_EXCLUDE`. The snapshot is exempt so agents don't 
 hours-old data while `/metrics` stays current; an *empty* snapshot is not published, since
 wiping the agent view is worse than a stale one.
 
+## Agent onboarding plugin
+
+The repo doubles as a Claude Code marketplace: `.claude-plugin/marketplace.json` (root) points at
+`./plugin`, which holds `plugin/.claude-plugin/plugin.json`, `plugin/commands/{install,connect,diagnose}.md`
+(→ `/klag:install` etc.) and `plugin/skills/klag/`. Users get it with
+`/plugin marketplace add themoah/klag` + `/plugin install klag@klag`.
+
+The `source: "./plugin"` subdir is deliberate: with `"./"` the plugin root is the repo root, so an
+install copies the entire tree — a local directory install measured 620 MB (`website/node_modules`,
+`build/`, even `.env`), and a GitHub install would clone every tracked file. With `./plugin` the
+installed payload is 36 KB. Keep the skill thin — it fetches
+`klag.dev/llms.txt` rather than duplicating the config reference, so it cannot drift.
+`scripts/check-plugin.sh` pins manifest shape and runs in CI. User-facing page:
+`website/src/content/docs/ai/agent-setup.mdx` (`klag.dev/agent-setup`).
+
+## klag.dev agent surface
+
+The site is a Cloudflare **Worker** with static assets (`website/src/worker.ts` +
+`wrangler.jsonc`; there is no Pages project). **Cloudflare Workers Builds** (Git integration
+on the `klag` Worker) publishes on push; `.github/workflows/website.yml` only builds, tests,
+and type-checks. There is deliberately no local deploy script, so never run
+`wrangler deploy` from a working tree. The Worker
+serves a read-only **documentation MCP server at `klag.dev/mcp`** (`search_klag_docs`,
+`get_klag_doc`, `get_klag_config`, `get_klag_metric`), which answers questions *about* Klag
+and must not be confused with a running instance's `/mcp`, which answers questions about a
+user's consumer groups. Keep that distinction in tool descriptions and docs.
+
+Its corpus is generated, never hand-written: `website/scripts/gen-llms.mjs` emits
+`llms.txt`, `llms-full.txt`, a `.md` twin per page, per-section `llms.txt`, and
+`src/generated/docs.json` (the config/metric tables the MCP tools answer from, parsed out of
+the reference tables — a table row that stops matching `| \`NAME\` | ... |` silently drops
+that key). `gen-skills.mjs` serves `plugin/` at `/skills/**` with SHA-256 digests in
+`/.well-known/agent-skills/index.json`, and re-stamps `openapi.json` with the Gradle version.
+Hand-written discovery files live in `website/public/.well-known/`; add new resources to
+`ai-catalog.json` too, or agents will not find them. `/developers/` is the human-facing index
+of all of it.
+
 ## HTTP Endpoints
 
 | Endpoint | Purpose |
@@ -162,14 +199,16 @@ See `docs/superpowers/specs/2026-06-01-mcp-support-design.md`.
 - `OTEL_METRIC_EXPORT_INTERVAL` - Export interval in milliseconds (default: 60000)
 - `OTEL_SERVICE_NAME` - Service name for resource attributes (default: klag)
 - `OTEL_RESOURCE_ATTRIBUTES` - Additional resource attributes (format: key1=value1,key2=value2)
+- `OTEL_EXPORTER_OTLP_CERTIFICATE` - Path to a PEM CA bundle the exporter additionally trusts (for an HTTPS collector with an internally-signed cert). Added on top of the JVM default trust, never replacing it, and scoped to the OTLP exporter (Kafka TLS is unaffected).
 
 *Custom Variables (override OTEL_* vars):*
 - `OTLP_ENDPOINT` - Direct endpoint URL (default: http://localhost:4318/v1/metrics)
 - `OTLP_STEP_MS` - Export interval in milliseconds (default: 60000)
 - `OTLP_HEADERS` - Authentication headers (format: key1=value1,key2=value2)
 - `OTLP_RESOURCE_ATTRIBUTES` - Resource attributes (format: key1=value1,key2=value2)
+- `OTLP_CA_CERT_PATH` (overrides `OTEL_EXPORTER_OTLP_CERTIFICATE`) - Path to a PEM CA bundle the exporter additionally trusts, for an HTTPS collector with an internally-signed cert. Trust is additive over the JVM defaults (never reduced). If set but the file is missing/empty/unparseable, OTLP registry creation fails fast rather than silently falling back to default trust.
 
-*Note:* Protocol is HTTP only (port 4318). Aggregation temporality is cumulative.
+*Note:* Protocol is HTTP only (port 4318); both `http://` and `https://` endpoints are supported (point `OTLP_CA_CERT_PATH` at the CA bundle for an internally-signed HTTPS collector). Aggregation temporality is cumulative.
 
 *Example for Grafana Cloud:*
 ```bash

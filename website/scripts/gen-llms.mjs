@@ -1,10 +1,13 @@
 // Generates GEO (generative-engine-optimization) files for klag.dev:
-//   public/llms.txt       - concise index: project summary + linked page list
-//   public/llms-full.txt  - full concatenated docs for direct LLM ingestion
+//   dist/llms.txt           - concise index: project summary + linked page list
+//   dist/llms-full.txt      - full concatenated docs for direct LLM ingestion
+//   dist/<slug>.md          - markdown twin of every page (agents append .md to a URL)
+//   dist/<section>/llms.txt - scoped per-section index
+//   src/generated/docs.json - corpus + config/metric tables for the /mcp Worker
 //
 // Walks src/content/docs/**, reads frontmatter (title/description) and body,
 // so the files never drift from the actual docs. Run at build time via the
-// "build" npm script before `astro build`.
+// "build" npm script, *after* `astro build` (it writes into dist/).
 
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative, dirname } from 'node:path';
@@ -21,7 +24,9 @@ const yamlEngine = {
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_DOCS = join(ROOT, 'src', 'content', 'docs');
-const DEFAULT_PUBLIC = join(ROOT, 'public');
+// Written into the build output: these are all generated, so they never land in public/.
+const DEFAULT_OUT = join(ROOT, 'dist');
+const DEFAULT_GENERATED = join(ROOT, 'src', 'generated');
 const SITE = 'https://klag.dev';
 
 async function walk(dir) {
@@ -270,12 +275,38 @@ function cleanBody(body) {
   return rewriteLinksOutsideFences(withoutComponents).trim();
 }
 
+// Pulls `| `name` | ... |` rows out of the docs' reference tables so the /mcp
+// Worker can answer "what does KAFKA_CHUNK_COUNT do" without shipping a parser.
+function extractTableRows(body) {
+  const rows = [];
+  let fence = null;
+  for (const line of body.split('\n')) {
+    const nextFence = updateFence(fence, line);
+    if (nextFence !== fence) {
+      fence = nextFence;
+      continue;
+    }
+    if (fence || !line.trimStart().startsWith('|')) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|')
+      .map((cell) => cell.trim());
+    const name = cells[0]?.match(/^`([^`]+)`$/)?.[1];
+    if (!name) continue; // header row, separator row, or a prose-first table
+    rows.push({ name, cells: cells.slice(1) });
+  }
+  return rows;
+}
+
 // file path -> site URL path (strip extension, drop /index)
 function toUrlPath(file, docsDir) {
   let p = relative(docsDir, file).replace(/\\/g, '/').replace(/\.(md|mdx)$/, '');
   if (p === 'index') return '/';
   if (p.endsWith('/index')) p = p.slice(0, -'/index'.length);
   return `/${p}/`;
+}
+
+// site URL path -> markdown twin, so agents can append .md to any page URL.
+function toMarkdownPath(urlPath) {
+  return urlPath === '/' ? 'index.md' : `${urlPath.replace(/^\/|\/$/g, '')}.md`;
 }
 
 // ---- llms.txt (index) ----
@@ -299,7 +330,21 @@ const disambig =
   'unrelated software — e.g. `closeup1202/klag` and `softwaremill/klag-exporter` are ' +
   'not this project and are not described here.';
 
-const quickFacts = `## Quick start
+const quickFacts = `## When to use Klag
+
+Reach for Klag when the task is any of these:
+
+- Monitor Kafka **consumer lag** and export it to Prometheus, Datadog, or OTLP.
+- Find out **why** a consumer group is behind: is lag growing or shrinking (lag velocity), how far behind in *time* (lag in ms), is a single partition hot, is the group about to lose data to retention.
+- Detect a **stuck consumer** — a group holding lag while its committed offset stops advancing.
+- **Replace kafka-lag-exporter** (unmaintained Scala/Akka) with a smaller, maintained exporter that keeps the metric names.
+- Alert on consumer-group **state** (rebalance storms, dead groups) and on **under-replicated partitions**.
+
+Klag is not a Kafka UI, a topic browser, or a cluster balancer — for those, see the comparison pages.
+
+First call for an agent: run the Docker command below with the user's broker address, then read \`http://localhost:8888/metrics\`. For a Kubernetes cluster, use the Helm chart at https://klag.dev/deployment/kubernetes/.
+
+## Quick start
 
 Monitoring consumer progress is essential for production Kafka. Run Klag with Prometheus:
 
@@ -330,18 +375,31 @@ Metrics are served at \`http://localhost:8888/metrics\`.
 - \`klag_consumer_commit_staleness_seconds\`: time since Klag observed offset progress while lagging.
 - \`klag_consumer_lag_retention_percent\`: retention-window risk, exported as percentage × 100.
 
-## MCP tools
+## MCP endpoints
 
-The opt-in, read-only MCP endpoint provides \`list_consumer_groups\`, \`get_consumer_group_lag\`, \`find_lagging_groups\`, and \`diagnose\`. Set \`MCP_ENABLED=true\` and select a metrics reporter so its in-memory snapshot is populated.
+There are two distinct MCP servers in the Klag ecosystem — do not confuse them:
+
+1. **Docs MCP (hosted): \`https://klag.dev/mcp\`** — read-only, no auth, Streamable HTTP (JSON-RPC 2.0 over POST). Answers questions *about Klag*: \`search_klag_docs\`, \`get_klag_doc\`, \`get_klag_config\`, \`get_klag_metric\`. Use it to look up configuration, metrics, and deployment steps before installing anything.
+2. **Klag's own MCP (self-hosted): \`/mcp\` on your Klag instance** — answers questions about *your* Kafka consumer groups from Klag's in-memory snapshot.
+
+## Klag instance MCP tools
+
+The opt-in, read-only MCP endpoint on a running Klag provides \`list_consumer_groups\`, \`get_consumer_group_lag\`, \`find_lagging_groups\`, and \`diagnose\`. Set \`MCP_ENABLED=true\` and select a metrics reporter so its in-memory snapshot is populated.
 `;
+
+// Sidebar groups big enough to be worth a scoped index of their own.
+const SECTIONS = ['metrics', 'configuration', 'integrations', 'deployment', 'guides', 'comparisons'];
 
 export async function generateLlms({
   docsDir = DEFAULT_DOCS,
-  outputDir = DEFAULT_PUBLIC,
+  outputDir = DEFAULT_OUT,
+  generatedDir = DEFAULT_GENERATED,
 } = {}) {
   const files = (await walk(docsDir)).sort();
   const pages = [];
   for (const file of files) {
+    // The 404 page is a signpost, not documentation: keep it out of the corpus.
+    if (/(^|\/)404\.(md|mdx)$/.test(file)) continue;
     const raw = await readFile(file, 'utf8');
     const { data, content } = matter(raw, { engines: { yaml: yamlEngine } });
     const urlPath = toUrlPath(file, docsDir);
@@ -353,6 +411,7 @@ export async function generateLlms({
       description: data.description || '',
       body: cleanBody(content),
       splash: data.template === 'splash',
+      rows: extractTableRows(content),
     });
   }
 
@@ -374,8 +433,69 @@ export async function generateLlms({
   await mkdir(outputDir, { recursive: true });
   await writeFile(join(outputDir, 'llms.txt'), index, 'utf8');
   await writeFile(join(outputDir, 'llms-full.txt'), full, 'utf8');
-  console.log(`gen-llms: wrote llms.txt + llms-full.txt (${pages.length} pages)`);
-  return { index, full, pageCount: pages.length };
+
+  // Markdown twin per page: agents append .md to any URL instead of parsing HTML.
+  for (const page of pages) {
+    const target = join(outputDir, toMarkdownPath(page.urlPath));
+    await mkdir(dirname(target), { recursive: true });
+    const frontmatter =
+      `---\ntitle: ${JSON.stringify(page.title)}\n` +
+      `description: ${JSON.stringify(page.description)}\n` +
+      `url: ${page.url}\n---\n\n`;
+    await writeFile(target, `${frontmatter}# ${page.title}\n\n${page.body}\n`, 'utf8');
+  }
+
+  // Scoped indexes so an agent can pull one product area instead of the whole manual.
+  for (const section of SECTIONS) {
+    const inSection = pages.filter((page) => page.urlPath.startsWith(`/${section}/`));
+    if (!inSection.length) continue;
+    let scoped = `# Klag — ${section}\n\n> ${summary}\n\n`;
+    scoped += `Full index: ${SITE}/llms.txt | Full text: ${SITE}/llms-full.txt\n\n## Docs\n\n`;
+    for (const page of inSection) {
+      scoped += `- [${page.title}](${page.url})${page.description ? `: ${page.description}` : ''}\n`;
+    }
+    await mkdir(join(outputDir, section), { recursive: true });
+    await writeFile(join(outputDir, section, 'llms.txt'), scoped, 'utf8');
+  }
+
+  // Corpus for the /mcp Worker (bundled at build time, see src/worker.ts).
+  const corpus = {
+    generatedAt: new Date().toISOString(),
+    site: SITE,
+    pages: pages.map(({ urlPath, url, title, description, body }) => ({
+      urlPath, url, title, description, body,
+    })),
+    config: pages
+      .filter((page) => page.urlPath.startsWith('/configuration/'))
+      .flatMap((page) => page.rows.map((row) => ({
+        name: row.name,
+        default: row.cells[0] ?? '',
+        description: row.cells[1] ?? '',
+        url: page.url,
+      }))),
+    metrics: pages
+      .filter((page) => page.urlPath.startsWith('/metrics/'))
+      .flatMap((page) => page.rows
+        .filter((row) => row.name.startsWith('klag'))
+        .map((row) => ({
+          name: row.name,
+          description: row.cells[row.cells.length - 1] ?? '',
+          url: page.url,
+        }))),
+  };
+  await mkdir(generatedDir, { recursive: true });
+  await writeFile(
+    join(generatedDir, 'docs.json'),
+    `${JSON.stringify(corpus)}\n`,
+    'utf8',
+  );
+
+  console.log(
+    `gen-llms: ${pages.length} pages -> llms.txt, llms-full.txt, ` +
+    `${pages.length} .md twins, section indexes, docs.json ` +
+    `(${corpus.config.length} config keys, ${corpus.metrics.length} metrics)`,
+  );
+  return { index, full, pageCount: pages.length, corpus };
 }
 
 if (

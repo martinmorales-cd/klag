@@ -84,7 +84,11 @@ before(async () => {
   ]);
   await writeFile(join(docsDir, 'fixture.mdx'), fixture, 'utf8');
   const generator = await import(pathToFileURL(generatorPath).href);
-  await generator.generateLlms({ docsDir, outputDir });
+  await generator.generateLlms({
+    docsDir,
+    outputDir,
+    generatedDir: join(sandboxRoot, 'generated'),
+  });
   [index, full] = await Promise.all([
     readFile(join(outputDir, 'llms.txt'), 'utf8'),
     readFile(join(outputDir, 'llms-full.txt'), 'utf8'),
@@ -177,6 +181,9 @@ test('parameterized generation leaves production docs and outputs unchanged', as
   const productionOutputs = [
     join(publicDir, 'llms.txt'),
     join(publicDir, 'llms-full.txt'),
+    // docs.json is what the Worker's MCP tools import. An isolated run that rewrote it
+    // would leave the live corpus holding this test's fixture page.
+    join(websiteRoot, 'src', 'generated', 'docs.json'),
   ];
   const snapshots = await Promise.all(productionOutputs.map(readOptional));
 
@@ -191,7 +198,11 @@ test('parameterized generation leaves production docs and outputs unchanged', as
     const moduleUrl = `${pathToFileURL(generatorPath).href}?test=${Date.now()}`;
     const generator = await import(moduleUrl);
     assert.equal(typeof generator.generateLlms, 'function');
-    await generator.generateLlms({ docsDir, outputDir });
+    await generator.generateLlms({
+      docsDir,
+      outputDir,
+      generatedDir: join(isolatedRoot, 'generated'),
+    });
 
     const isolatedFull = await readFile(
       join(outputDir, 'llms-full.txt'),
@@ -228,6 +239,7 @@ test('production corpus generates portable output with critical operational fact
     const generated = await generator.generateLlms({
       docsDir: productionDocsDir,
       outputDir,
+      generatedDir: join(isolatedRoot, 'generated'),
     });
     const generatedFiles = await Promise.all([
       readFile(join(outputDir, 'llms.txt'), 'utf8'),
@@ -289,10 +301,12 @@ test('forbidden-superlative matcher catches #1 claims around Klag', () => {
 test('llms.txt leads agents with compact operational facts', () => {
   const docsPosition = index.indexOf('## Docs');
   for (const heading of [
+    '## When to use Klag',
     '## Quick start',
     '## Minimum configuration',
     '## Key Prometheus metrics',
-    '## MCP tools',
+    '## MCP endpoints',
+    '## Klag instance MCP tools',
   ]) {
     const position = index.indexOf(heading);
     assert.ok(position >= 0, `missing ${heading}`);
@@ -327,4 +341,60 @@ test('llms.txt leads agents with compact operational facts', () => {
     assert.match(index, new RegExp(`\\b${tool}\\b`));
   }
   assert.doesNotMatch(index, /\b(?:must-have|best|#1)\b/i);
+});
+
+// The /mcp Worker bundles docs.json and answers config/metric lookups straight out of it,
+// so an empty body or a dropped reference table silently degrades every tool.
+test('generation emits a Worker corpus, markdown twins, and scoped indexes', async () => {
+  const isolatedRoot = await mkdtemp(join(tmpdir(), 'klag-llms-corpus-'));
+  const outputDir = join(isolatedRoot, 'output');
+  const generatedDir = join(isolatedRoot, 'generated');
+
+  try {
+    const moduleUrl = `${pathToFileURL(generatorPath).href}?corpus=${Date.now()}`;
+    const generator = await import(moduleUrl);
+    const generated = await generator.generateLlms({
+      docsDir: productionDocsDir,
+      outputDir,
+      generatedDir,
+    });
+
+    const corpus = JSON.parse(await readFile(join(generatedDir, 'docs.json'), 'utf8'));
+    assert.equal(corpus.pages.length, generated.pageCount);
+    assert.ok(corpus.pages.length > 30, 'corpus lost pages');
+    for (const page of corpus.pages) {
+      assert.ok(page.body.length > 0, `${page.urlPath} has an empty body`);
+      assert.match(page.urlPath, /^\//);
+    }
+    assert.ok(
+      !corpus.pages.some((page) => page.urlPath === '/404/'),
+      'the 404 signpost must stay out of the corpus',
+    );
+
+    // Reference tables feed get_klag_config / get_klag_metric.
+    assert.ok(corpus.config.length > 30, 'configuration reference table not parsed');
+    assert.ok(corpus.metrics.length > 10, 'metrics tables not parsed');
+    const chunkCount = corpus.config.find((key) => key.name === 'KAFKA_CHUNK_COUNT');
+    assert.ok(chunkCount, 'KAFKA_CHUNK_COUNT missing from the config index');
+    assert.match(chunkCount.default, /1/);
+    assert.ok(
+      corpus.metrics.some((metric) => metric.name === 'klag.consumer.lag.velocity'),
+      'klag.consumer.lag.velocity missing from the metric index',
+    );
+
+    // Markdown twin per page: /metrics/lag-velocity/ -> /metrics/lag-velocity.md
+    const twin = await readFile(join(outputDir, 'metrics', 'lag-velocity.md'), 'utf8');
+    assert.match(twin, /^---\ntitle: "Lag Velocity"/);
+    assert.match(twin, /\n# Lag Velocity\n/);
+    const home = await readFile(join(outputDir, 'index.md'), 'utf8');
+    assert.match(home, /^---\ntitle: /);
+
+    // Scoped per-section index.
+    const scoped = await readFile(join(outputDir, 'metrics', 'llms.txt'), 'utf8');
+    assert.match(scoped, /^# Klag — metrics/);
+    assert.match(scoped, /https:\/\/klag\.dev\/metrics\/lag-velocity\//);
+    assert.doesNotMatch(scoped, /https:\/\/klag\.dev\/deployment\//);
+  } finally {
+    await rm(isolatedRoot, { recursive: true, force: true });
+  }
 });

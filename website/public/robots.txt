@@ -4,7 +4,10 @@
 # explicitly ALLOW the known AI training and AI-search crawlers below and publish
 # machine-friendly corpora at /llms.txt and /llms-full.txt for ingestion.
 
+# Content Signals: declarative, and deliberately permissive on all three — klag.dev
+# is open documentation and being in training corpora is the point.
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 
 # --- AI training / dataset crawlers (explicitly allowed) ---
@@ -56,4 +59,15 @@ Allow: /
 # Machine-readable docs corpus (llms.txt convention):
 #   https://klag.dev/llms.txt        (index + summaries)
 #   https://klag.dev/llms-full.txt   (full concatenated documentation)
+#   https://klag.dev/<section>/llms.txt  (scoped per-section indexes)
+# Every page also has a markdown twin: append .md to any URL.
+#
+# Agent discovery:
+#   https://klag.dev/.well-known/ai-catalog.json          (Agentic Resource Discovery)
+#   https://klag.dev/.well-known/agent-skills/index.json  (Agent Skills)
+#   https://klag.dev/.well-known/mcp/server-card.json     (MCP server card)
+#   https://klag.dev/mcp                                  (docs MCP, JSON-RPC over POST)
+#   https://klag.dev/openapi.json                         (Klag's own HTTP API)
+
 Sitemap: https://klag.dev/sitemap-index.xml
+Sitemap: https://klag.dev/sitemap.xml

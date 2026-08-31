@@ -6,6 +6,13 @@ description: Klag's opt-in, read-only MCP endpoint lets AI agents query consumer
 Klag exposes an optional **MCP** (Model Context Protocol) endpoint so AI agents (SRE
 copilots, dev assistants) can query consumer-lag state in natural workflows.
 
+:::note[Two different MCP servers]
+This page is about the endpoint on **your Klag instance**, which answers questions about
+your Kafka consumer groups. klag.dev separately hosts a read-only **documentation** MCP
+server at `https://klag.dev/mcp`, which answers questions about Klag itself — config keys,
+metrics, deployment. See [Developers](/developers/) for that one.
+:::
+
 It is **opt-in, read-only, and zero-impact when off**. The endpoint serves an in-memory
 snapshot the metrics collector publishes after each cycle; it never queries Kafka or
 touches the collection flow.
@@ -24,6 +31,9 @@ collection runs.
 ## Transport
 
 Streamable HTTP, **JSON-RPC 2.0 over POST**. A `GET` returns `405`.
+
+The full HTTP surface, including this endpoint, is published as an OpenAPI 3.1 spec at
+[`klag.dev/openapi.json`](https://klag.dev/openapi.json).
 
 ## Tools
 
@@ -185,12 +195,96 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.klag]
 url = "https://klag.example.com/mcp"
-http_headers = { Authorization = "Bearer <token>" }
+bearer_token_env_var = "KLAG_MCP_TOKEN"
 ```
+
+`bearer_token_env_var` names the environment variable that holds the token, so it is never
+written to `config.toml` — export it before launching Codex. The inline form
+`http_headers = { Authorization = "Bearer <token>" }` works too, but stores the token on disk.
 
 Older Codex builds only spoke stdio and needed the `mcp-remote` bridge
 (`command = "npx"`, `args = ["mcp-remote", "https://klag.example.com/mcp"]`). Check your
 Codex version's MCP docs if the `url` form isn't recognized.
+
+### GitHub Copilot
+
+**VS Code** — add to `.vscode/mcp.json` (workspace) or your user MCP config. VS Code uses
+the top-level key `servers`, not `mcpServers`. Prefer `${input:...}` for tokens:
+
+```json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "klag-mcp-token",
+      "description": "Klag MCP token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "klag": {
+      "type": "http",
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${input:klag-mcp-token}" }
+    }
+  }
+}
+```
+
+Switch Copilot Chat to **Agent** mode and confirm the server appears under the tools picker.
+
+**Copilot CLI** — add to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "klag": {
+      "type": "http",
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" },
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+Or from the terminal:
+
+```shell
+copilot mcp add --transport http \
+  --header "Authorization: Bearer <token>" \
+  klag https://klag.example.com/mcp
+```
+
+Visual Studio and JetBrains IDEs use the same `servers` object in `mcp.json`; remote
+servers can also use `requestInit.headers` instead of `headers`.
+
+### OpenCode
+
+Add to `~/.config/opencode/opencode.json` (global) or `opencode.json` in your project.
+OpenCode v2 nests servers under `mcp.servers`. Set `oauth: false` when Klag uses a bearer
+token — otherwise OpenCode may attempt OAuth discovery first:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "klag": {
+        "type": "remote",
+        "url": "https://klag.example.com/mcp",
+        "oauth": false,
+        "headers": {
+          "Authorization": "Bearer {env:KLAG_MCP_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+Use `{env:VAR}` for secret interpolation. Older OpenCode builds place servers directly
+under `mcp` with the same fields.
 
 ### Kilo Code
 

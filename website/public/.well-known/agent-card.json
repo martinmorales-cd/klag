@@ -1,0 +1,48 @@
+{
+  "protocolVersion": "0.3.0",
+  "name": "Klag documentation agent",
+  "description": "Answers questions about Klag, the open-source Kafka consumer lag exporter: configuration keys, exported metrics, deployment (Docker, Helm, Strimzi, GraalVM native), and how it compares to Burrow, KMinion, AKHQ, Redpanda Console, Cruise Control, and Confluent Control Center.",
+  "url": "https://klag.dev/mcp",
+  "preferredTransport": "JSONRPC",
+  "provider": {
+    "organization": "Klag",
+    "url": "https://klag.dev"
+  },
+  "version": "1.0.0",
+  "documentationUrl": "https://klag.dev/developers/",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": false
+  },
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain", "text/markdown"],
+  "securitySchemes": {},
+  "security": [],
+  "skills": [
+    {
+      "id": "search-klag-docs",
+      "name": "Search the Klag documentation",
+      "description": "Full-text search across klag.dev, returning ranked page excerpts with URLs.",
+      "tags": ["kafka", "consumer-lag", "monitoring", "documentation"],
+      "examples": [
+        "How do I read klag_consumer_lag_velocity?",
+        "What ACLs does Klag need on a secured Kafka cluster?"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/markdown"]
+    },
+    {
+      "id": "lookup-klag-config",
+      "name": "Look up Klag configuration and metrics",
+      "description": "Resolve any Klag environment variable or exported metric to its default, meaning, and documentation page.",
+      "tags": ["kafka", "configuration", "prometheus", "metrics"],
+      "examples": [
+        "What does KAFKA_CHUNK_COUNT do?",
+        "Which metric shows a stuck consumer?"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/markdown"]
+    }
+  ]
+}

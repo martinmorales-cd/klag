@@ -12,9 +12,12 @@ import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.micrometer.registry.otlp.AggregationTemporality;
 import io.micrometer.registry.otlp.OtlpConfig;
+import io.micrometer.registry.otlp.OtlpHttpMetricsSender;
 import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +27,12 @@ import org.slf4j.LoggerFactory;
 public final class MicrometerConfig {
 
   private static final Logger log = LoggerFactory.getLogger(MicrometerConfig.class);
+
+  // Timeouts for the custom OTLP HTTP sender (used only on the extra-CA-trust path). Mirrors the
+  // former PushRegistryConfig defaults, whose connectTimeout()/readTimeout() are deprecated in
+  // Micrometer 1.16; the sender owns its timeouts now instead of reading them off the registry config.
+  private static final Duration OTLP_CONNECT_TIMEOUT = Duration.ofSeconds(1);
+  private static final Duration OTLP_READ_TIMEOUT = Duration.ofSeconds(10);
 
   private MicrometerConfig() {}
 
@@ -201,9 +210,18 @@ public final class MicrometerConfig {
       }
     };
 
-    OtlpMeterRegistry registry = new OtlpMeterRegistry(config, Clock.SYSTEM);
-    log.info("OTLP registry created - endpoint: {}, temporality: {}",
-             config.url(), config.aggregationTemporality());
+    // When a CA-cert path is configured (OTLP_CA_CERT_PATH / OTEL_EXPORTER_OTLP_CERTIFICATE),
+    // route exports through an HTTP sender whose SSLContext additively trusts those CAs so an
+    // internally-signed HTTPS collector validates. Otherwise use the stock registry unchanged.
+    Optional<SSLContext> tls = OtlpTls.sslContextFromEnvironment();
+    OtlpMeterRegistry registry = tls
+        .map(ctx -> OtlpMeterRegistry.builder(config)
+            .metricsSender(new OtlpHttpMetricsSender(
+                OtlpTls.httpSender(ctx, OTLP_CONNECT_TIMEOUT, OTLP_READ_TIMEOUT)))
+            .build())
+        .orElseGet(() -> new OtlpMeterRegistry(config, Clock.SYSTEM));
+    log.info("OTLP registry created - endpoint: {}, temporality: {}, customCaTrust: {}",
+             config.url(), config.aggregationTemporality(), tls.isPresent());
     return registry;
   }
 

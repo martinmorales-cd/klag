@@ -1,0 +1,228 @@
+---
+title: Agent Setup
+description: Install and run Klag from your AI coding agent. Add the Klag plugin to Claude Code for /klag:install, /klag:connect and /klag:diagnose, or point Copilot, Codex, Cursor, OpenCode and other agents at the machine-readable docs.
+---
+
+import { Tabs, TabItem, Steps, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+Klag ships a plugin for AI coding agents. Instead of reading this site and assembling the
+deployment yourself, you tell the agent to install Klag and it works out the rest: where to run
+it, how to reach your Kafka, whether the metrics actually arrived.
+
+The plugin is thin on purpose. It carries the decision procedure and the verification steps, and
+fetches the details from these docs, so it does not drift when Klag changes.
+
+## Claude Code
+
+<Steps>
+
+1. Add the marketplace and install the plugin:
+
+   ```txt
+   /plugin marketplace add themoah/klag
+   /plugin install klag@klag
+   ```
+
+2. Run the installer:
+
+   ```txt
+   /klag:install
+   ```
+
+   It detects what you have — Docker, a kube context, Helm, ArgoCD or Flux, Strimzi — asks where
+   to deploy, wires up the Kafka connection, and then verifies that `/readyz` is green and
+   `klag_consumer_lag` series are actually being exported. It confirms with you before every
+   command that changes anything.
+
+3. Let it turn on the [MCP endpoint](/ai/mcp/), then connect your agent to it:
+
+   ```txt
+   /klag:connect
+   ```
+
+4. Ask about your lag:
+
+   ```txt
+   /klag:diagnose payments-service
+   ```
+
+</Steps>
+
+### What the plugin gives you
+
+| Command | Does |
+|---|---|
+| `/klag:install` | Detect environment → deploy (compose demo, Docker, Helm, GitOps manifest, or jar) → verify metrics → offer MCP |
+| `/klag:connect` | Register a running Klag's MCP endpoint with your agent and confirm it answers |
+| `/klag:diagnose` | Rank what is falling behind and explain why: stuck consumers, rebalance storms, retention risk, hot partitions |
+
+It also installs a `klag` skill, so an agent that has it will use Klag's real configuration
+surface when you simply ask it to "set up Kafka lag monitoring" — no slash command needed.
+
+:::note[No Kafka handy?]
+Ask for the demo target. `/klag:install` brings up the repo's Compose stack — Kafka, Klag, a
+producer, and three deliberately misbehaving consumers — so there is real lag to look at within
+about a minute.
+:::
+
+## Other agents
+
+The plugin's commands are Claude Code specific, but nothing else here is. Every agent can use
+Klag's machine-readable docs, and any MCP-capable client can query a running Klag.
+
+<Tabs>
+  <TabItem label="Codex">
+
+Point it at the docs corpus, then let it install:
+
+```txt
+Read https://klag.dev/llms-full.txt, then set up Klag against my Kafka cluster
+and verify that /metrics is exporting klag_consumer_lag.
+```
+
+Connect a running Klag over MCP by adding it to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.klag]
+url = "https://klag.example.com/mcp"
+bearer_token_env_var = "KLAG_MCP_TOKEN"
+```
+
+`bearer_token_env_var` names the environment variable holding the token, so the value never
+lands in `config.toml`. Export it (same value as Klag's `MCP_AUTH_TOKEN`) before launching
+Codex. A literal `http_headers = { Authorization = "Bearer <token>" }` also works, at the cost
+of storing the token on disk.
+
+  </TabItem>
+  <TabItem label="GitHub Copilot">
+
+Same install prompt works in VS Code Copilot Chat (Agent mode), Copilot CLI, or Visual Studio:
+
+```txt
+Read https://klag.dev/llms-full.txt, then set up Klag against my Kafka cluster
+and verify that /metrics is exporting klag_consumer_lag.
+```
+
+**VS Code** — add to `.vscode/mcp.json` (workspace) or your user MCP config
+(`MCP: Open User Configuration`). Prefer `${input:...}` for the token so it is not
+stored in plain text:
+
+```json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "klag-mcp-token",
+      "description": "Klag MCP token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "klag": {
+      "type": "http",
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${input:klag-mcp-token}" }
+    }
+  }
+}
+```
+
+**Copilot CLI** — add to `~/.copilot/mcp-config.json` or run once from the terminal:
+
+```shell
+copilot mcp add --transport http \
+  --header "Authorization: Bearer <token>" \
+  klag https://klag.example.com/mcp
+```
+
+  </TabItem>
+  <TabItem label="Cursor">
+
+Same prompt works. For MCP, add to `~/.cursor/mcp.json` (global — keep tokens out of the
+project file, which is usually committed):
+
+```json
+{
+  "mcpServers": {
+    "klag": {
+      "url": "https://klag.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+  </TabItem>
+  <TabItem label="OpenCode">
+
+Same install prompt in the terminal agent:
+
+```txt
+Read https://klag.dev/llms-full.txt, then set up Klag against my Kafka cluster
+and verify that /metrics is exporting klag_consumer_lag.
+```
+
+For MCP, add to `~/.config/opencode/opencode.json` (global) or `opencode.json` in your
+project. Use `oauth: false` when Klag expects a bearer token instead of OAuth discovery:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "klag": {
+        "type": "remote",
+        "url": "https://klag.example.com/mcp",
+        "oauth": false,
+        "headers": {
+          "Authorization": "Bearer {env:KLAG_MCP_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+Older OpenCode builds place servers directly under `mcp` instead of `mcp.servers` — same
+fields, flatter nesting.
+
+  </TabItem>
+  <TabItem label="Anything else">
+
+Klag needs no agent-specific SDK. Two things are portable:
+
+- **Docs**: [`llms.txt`](https://klag.dev/llms.txt) (page index) and
+  [`llms-full.txt`](https://klag.dev/llms-full.txt) (whole corpus in one fetch). Every page also
+  serves markdown.
+- **MCP**: Klag speaks Streamable HTTP (JSON-RPC 2.0 over POST) at `/mcp`. Any client with
+  remote-MCP support connects with just the URL and a bearer token.
+
+Per-client MCP configurations live on the [MCP Endpoint](/ai/mcp/) page.
+
+  </TabItem>
+</Tabs>
+
+## What it will and will not do
+
+The installer runs real commands, so it is deliberately fenced in:
+
+- It confirms before every command that mutates your machine or cluster. Detection is read-only.
+- Kafka credentials and the MCP token go into a Kubernetes Secret or a `--set` flag — never into a
+  `values.yaml` inside your git worktree, and never echoed back to you.
+- On an ArgoCD- or Flux-managed cluster it **writes** the `Application` / `HelmRelease` and stops.
+  It does not `kubectl apply` behind GitOps.
+- It never deletes, scales or restarts workloads it did not create.
+- A kube context that looks like production is called out, and needs a second confirmation.
+
+## Next
+
+<CardGrid>
+  <LinkCard title="MCP Endpoint" href="/ai/mcp/" description="The read-only tools your agent gets: list groups, per-group lag, triage, diagnose." />
+  <LinkCard title="Manual installation" href="/getting-started/installation/" description="Docker, Helm, and jar instructions if you would rather do it yourself." />
+  <LinkCard title="Configuration reference" href="/configuration/reference/" description="Every environment variable, with defaults." />
+  <LinkCard title="Troubleshooting" href="/guides/troubleshooting/" description="503 on /readyz, empty /metrics, MCP 401/405." />
+</CardGrid>
+
+The plugin source lives in the Klag repo itself, under
+[`plugin/`](https://github.com/themoah/klag/tree/main/plugin) — one source of truth, versioned
+with Klag.

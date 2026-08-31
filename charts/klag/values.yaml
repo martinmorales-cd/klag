@@ -110,6 +110,12 @@ metrics:
     # OTLP export interval in milliseconds (maps to OTLP_STEP_MS env var).
     # Leave empty to fall back to OTEL_METRIC_EXPORT_INTERVAL or the app default (60000).
     stepMs: ""
+    # Path to a PEM CA bundle the OTLP exporter should additionally trust (maps to
+    # OTLP_CA_CERT_PATH). Set this when the collector is served over HTTPS with an
+    # internally-signed certificate; the CAs are added on top of the JVM defaults, never
+    # replacing them. Mount the bundle with extraVolumes/extraVolumeMounts. Empty = JVM
+    # default trust only.
+    caCertPath: ""
     # Use an existing secret for OTLP headers
     existingSecret: ""
     secretKeys:
@@ -253,3 +259,11 @@ serviceMonitor:
   scrapeTimeout: 10s
   # Additional labels for the ServiceMonitor
   labels: {}
+  # Prometheus metric_relabel_configs applied after scrape (drop labels, mint
+  # extra labels from existing ones). Empty = omit the field.
+  # Example:
+  # - action: labeldrop
+  #   regex: ^(member_host|consumer_id|client_id)$
+  metricRelabelings: []
+  # Prometheus relabel_configs applied to the scrape target before scrape.
+  relabelings: []

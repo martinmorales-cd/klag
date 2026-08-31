@@ -1,0 +1,138 @@
+---
+title: Developers
+description: Klag's machine-readable surface in one place — OpenAPI spec, the hosted documentation MCP server, a self-hosted instance's MCP endpoint, agent skills, and the llms.txt corpus.
+---
+
+import { Tabs, TabItem, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+Everything Klag exposes to programs rather than people. If you are a person, start with the
+[Quick Start](/getting-started/quick-start/).
+
+## The HTTP API
+
+A running Klag serves a small, read-only HTTP surface on `HTTP_PORT` (default `8888`).
+Klag is self-hosted, so this is *your* endpoint — there is no hosted Klag service and no
+API key to request.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/healthz` | Liveness. Always `200` while the process is up. |
+| `GET` | `/readyz` | Readiness. `200` when Kafka is reachable, `503` when it is not. |
+| `GET` | `/metrics` | Prometheus scrape endpoint (when `METRICS_REPORTER=prometheus`). |
+| `GET` | `/version` | Klag, Vert.x, and Java versions. |
+| `POST` | `/mcp` | MCP endpoint, JSON-RPC 2.0 (when `MCP_ENABLED=true`). `GET` returns `405`. |
+
+**OpenAPI 3.1 spec:** [`klag.dev/openapi.json`](https://klag.dev/openapi.json) — typed
+response schemas, unique operation IDs, and the bearer scheme used by `MCP_AUTH_TOKEN`.
+Also listed in the [API catalog](https://klag.dev/.well-known/api-catalog) (RFC 9727).
+
+```bash
+curl -s http://localhost:8888/readyz   # {"status":"UP","kafka":"connected"}
+curl -s http://localhost:8888/version  # {"version":"…","vertxVersion":"…","javaVersion":"…"}
+```
+
+## Two MCP servers, two jobs
+
+This trips people up, so it is worth being blunt about it:
+
+| | Documentation MCP | Klag instance MCP |
+| --- | --- | --- |
+| **URL** | `https://klag.dev/mcp` (hosted, always on) | `/mcp` on *your* Klag (opt-in) |
+| **Answers** | Questions about Klag: config, metrics, deployment | Questions about *your* Kafka consumer groups |
+| **Auth** | None | `MCP_AUTH_TOKEN` bearer, when set |
+| **Reads** | The published docs | Klag's in-memory snapshot — never Kafka directly |
+
+### Documentation MCP — `https://klag.dev/mcp`
+
+Read-only, unauthenticated, Streamable HTTP (JSON-RPC 2.0 over POST). Use it to look up
+configuration and metrics while installing or operating Klag, without scraping this site.
+
+| Tool | Purpose |
+| --- | --- |
+| `search_klag_docs` | Full-text search across klag.dev; ranked excerpts with URLs. |
+| `get_klag_doc` | The full markdown of one page. |
+| `get_klag_config` | Any environment variable: default value and what it does. |
+| `get_klag_metric` | Any exported metric: meaning and tags. |
+
+It also exposes `/llms.txt` and `/llms-full.txt` as MCP resources.
+
+<Tabs>
+<TabItem label="Claude Code">
+
+```bash
+claude mcp add --transport http klag-docs https://klag.dev/mcp
+```
+
+</TabItem>
+<TabItem label="mcp.json">
+
+```json
+{
+  "mcpServers": {
+    "klag-docs": {
+      "type": "http",
+      "url": "https://klag.dev/mcp"
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="curl">
+
+```bash
+curl -s https://klag.dev/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"get_klag_config","arguments":{"name":"KAFKA_CHUNK_COUNT"}}}'
+```
+
+</TabItem>
+</Tabs>
+
+Server card: [`/.well-known/mcp/server-card.json`](https://klag.dev/.well-known/mcp/server-card.json).
+
+### Klag instance MCP
+
+Turn on `MCP_ENABLED=true` with a metrics reporter configured, and your instance exposes
+`list_consumer_groups`, `get_consumer_group_lag`, `find_lagging_groups`, and `diagnose`
+over the same transport. Full reference: [MCP Endpoint](/ai/mcp/).
+
+## Agent skills
+
+The Claude Code plugin — `/klag:install`, `/klag:connect`, `/klag:diagnose` — is published
+both as a plugin and as plain skill markdown any agent can fetch.
+
+```txt
+/plugin marketplace add themoah/klag
+/plugin install klag@klag
+```
+
+Discovery index: [`/.well-known/agent-skills/index.json`](https://klag.dev/.well-known/agent-skills/index.json)
+(Agent Skills v0.2.0, with a SHA-256 digest per artifact). Walkthrough:
+[Agent setup](/ai/agent-setup/).
+
+## Documentation as data
+
+| Resource | What it is |
+| --- | --- |
+| [`/llms.txt`](https://klag.dev/llms.txt) | Summary, quick start, key metrics, and a linked index of every page. |
+| [`/llms-full.txt`](https://klag.dev/llms-full.txt) | Every page concatenated, for direct ingestion. |
+| `/<section>/llms.txt` | Scoped index per area — [metrics](https://klag.dev/metrics/llms.txt), [configuration](https://klag.dev/configuration/llms.txt), [integrations](https://klag.dev/integrations/llms.txt), [deployment](https://klag.dev/deployment/llms.txt), [guides](https://klag.dev/guides/llms.txt), [comparisons](https://klag.dev/comparisons/llms.txt). |
+| `<any page>.md` | The markdown twin of any page — append `.md`, or send `Accept: text/markdown`. |
+| [`/.well-known/ai-catalog.json`](https://klag.dev/.well-known/ai-catalog.json) | Agentic Resource Discovery catalog: every resource on this page, machine-readable. |
+| [`/.well-known/agent-card.json`](https://klag.dev/.well-known/agent-card.json) | A2A agent card. |
+
+```bash
+curl -s https://klag.dev/metrics/lag-velocity.md          # markdown twin
+curl -s -H 'Accept: text/markdown' https://klag.dev/      # content negotiation
+```
+
+## Source and packaging
+
+<CardGrid>
+  <LinkCard title="Source" href="https://github.com/themoah/klag" description="Apache-2.0, Java 21 on Vert.x." />
+  <LinkCard title="Container image" href="https://hub.docker.com/r/themoah/klag" description="themoah/klag — JVM and native variants." />
+  <LinkCard title="Helm chart" href="https://artifacthub.io/packages/helm/klag/klag" description="Kubernetes deployment, ServiceMonitor included." />
+  <LinkCard title="Build from source" href="/development/build/" description="Gradle, tests, and the GraalVM native image." />
+</CardGrid>

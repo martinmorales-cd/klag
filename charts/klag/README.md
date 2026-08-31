@@ -93,6 +93,19 @@ helm install klag ./charts/klag \
   --set serviceMonitor.enabled=true
 ```
 
+Drop high-cardinality member labels (or mint extra labels) with `serviceMonitor.metricRelabelings`:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  metricRelabelings:
+    - action: labeldrop
+      regex: ^(member_host|consumer_id|client_id)$
+```
+
+`labeldrop` on those names overlaps `CONSUMER_MEMBER_LABELS_ENABLED=false`, which is
+cheaper — Klag never builds the series.
+
 ## Configuration
 
 ### General Parameters
@@ -143,6 +156,7 @@ Set `KLAG_CONFIG_FILE` to the path of an external `application.properties` (typi
 | `metrics.otlp.headers` | Authentication headers (key1=value1,key2=value2) | `""` |
 | `metrics.otlp.serviceName` | Service name for OTEL_SERVICE_NAME | `klag` |
 | `metrics.otlp.resourceAttributes` | Additional resource attributes | `""` |
+| `metrics.otlp.caCertPath` | Path to a PEM CA bundle the exporter additionally trusts, for an HTTPS collector with an internally-signed cert (maps to `OTLP_CA_CERT_PATH`; added on top of JVM defaults). Mount it via `extraVolumes`/`extraVolumeMounts`. | `""` |
 | `metrics.otlp.existingSecret` | Existing secret for OTLP headers | `""` |
 | `metrics.otlp.secretKeys.headers` | Key in secret for headers | `otlp-headers` |
 
@@ -200,6 +214,8 @@ Set `KLAG_CONFIG_FILE` to the path of an external `application.properties` (typi
 | `serviceMonitor.interval` | Scrape interval | `30s` |
 | `serviceMonitor.scrapeTimeout` | Scrape timeout | `10s` |
 | `serviceMonitor.labels` | Additional labels | `{}` |
+| `serviceMonitor.metricRelabelings` | Prometheus `metric_relabel_configs` (post-scrape). Omitted when empty | `[]` |
+| `serviceMonitor.relabelings` | Prometheus `relabel_configs` (pre-scrape). Omitted when empty | `[]` |
 
 ### Pod Configuration
 

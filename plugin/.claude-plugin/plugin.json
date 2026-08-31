@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "klag",
+  "version": "0.1.0",
+  "description": "Set up Klag (Kafka consumer lag exporter) against your cluster: pick a deployment target, wire Kafka auth, verify metrics, and connect the read-only MCP endpoint.",
+  "author": {
+    "name": "themoah",
+    "email": "aviv@dozorets.com",
+    "url": "https://github.com/themoah"
+  },
+  "homepage": "https://klag.dev",
+  "repository": "https://github.com/themoah/klag",
+  "license": "Apache-2.0",
+  "keywords": [
+    "kafka",
+    "consumer-lag",
+    "monitoring",
+    "prometheus",
+    "mcp"
+  ]
+}
