@@ -1,0 +1,290 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Klag HTTP API",
+    "summary": "The HTTP surface of a self-hosted Klag instance.",
+    "description": "Klag is an open-source Kafka consumer lag exporter. It is self-hosted: you run the container (or native binary) next to your Kafka cluster, and it serves this API on `HTTP_PORT` (default 8888). There is no hosted Klag service and no API key — reachability and authorization are whatever your network and `MCP_AUTH_TOKEN` provide.\n\nFor questions *about* Klag rather than about your cluster, klag.dev hosts a read-only documentation MCP server at https://klag.dev/mcp.",
+    "version": "0.2.14",
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0"
+    },
+    "contact": {
+      "name": "Klag issues",
+      "url": "https://github.com/themoah/klag/issues"
+    }
+  },
+  "externalDocs": {
+    "description": "Klag documentation",
+    "url": "https://klag.dev"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8888",
+      "description": "A self-hosted Klag instance. Replace host and port with your own deployment."
+    }
+  ],
+  "tags": [
+    { "name": "health", "description": "Kubernetes-style liveness and readiness probes." },
+    { "name": "metrics", "description": "Prometheus scrape endpoint." },
+    { "name": "meta", "description": "Build information." },
+    { "name": "mcp", "description": "Read-only Model Context Protocol endpoint for AI agents." }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getLiveness",
+        "summary": "Liveness probe",
+        "description": "Always returns 200 while the HTTP server is up. Does not check Kafka — use `/readyz` for that.",
+        "responses": {
+          "200": {
+            "description": "The process is alive.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": { "status": "UP" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getReadiness",
+        "summary": "Readiness probe",
+        "description": "Returns 200 when the Kafka AdminClient connection is healthy, 503 when it is not. The check runs every `KAFKA_HEALTH_CHECK_INTERVAL_MS` (default 30000).",
+        "responses": {
+          "200": {
+            "description": "Kafka is reachable.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": { "status": "UP", "kafka": "connected" }
+              }
+            }
+          },
+          "503": {
+            "description": "Kafka is unreachable; the instance is not ready to serve metrics.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": { "status": "DOWN", "kafka": "disconnected" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": ["metrics"],
+        "operationId": "getPrometheusMetrics",
+        "summary": "Prometheus scrape endpoint",
+        "description": "Exposition-format metrics. Registered only when `METRICS_REPORTER=prometheus`; with any other reporter this path returns 404 and metrics are pushed to Datadog or the OTLP endpoint instead.",
+        "responses": {
+          "200": {
+            "description": "Prometheus exposition format.",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" },
+                "example": "# HELP klag_consumer_lag Consumer lag per partition\n# TYPE klag_consumer_lag gauge\nklag_consumer_lag{consumer_group=\"orders\",topic=\"events\",partition=\"0\"} 42.0\n"
+              }
+            }
+          },
+          "404": {
+            "description": "The Prometheus reporter is not enabled."
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": ["meta"],
+        "operationId": "getVersion",
+        "summary": "Build information",
+        "responses": {
+          "200": {
+            "description": "Klag, Vert.x, and Java versions.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VersionResponse" },
+                "example": { "version": "0.2.14", "vertxVersion": "4.5.30", "javaVersion": "21.0.9" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "tags": ["mcp"],
+        "operationId": "callMcp",
+        "summary": "MCP endpoint (JSON-RPC 2.0)",
+        "description": "Read-only Model Context Protocol endpoint over Streamable HTTP. Registered when `MCP_ENABLED=true`. Served from the metrics collector's in-memory snapshot — it never queries Kafka directly, so the tools report that the snapshot is not ready until metrics collection runs (`METRICS_REPORTER`). Path is configurable with `MCP_PATH`.\n\nMethods: `initialize`, `ping`, `notifications/initialized`, `tools/list`, `tools/call`. Tools: `list_consumer_groups`, `get_consumer_group_lag`, `find_lagging_groups`, `diagnose`.",
+        "security": [{}, { "mcpBearerToken": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/JsonRpcRequest" },
+              "examples": {
+                "listTools": {
+                  "summary": "List the available tools",
+                  "value": { "jsonrpc": "2.0", "id": 1, "method": "tools/list" }
+                },
+                "initializedNotification": {
+                  "summary": "A notification (no id) — answered with 202 and no body",
+                  "value": { "jsonrpc": "2.0", "method": "notifications/initialized" }
+                },
+                "findLaggingGroups": {
+                  "summary": "Find consumer groups above a lag threshold",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": { "name": "find_lagging_groups", "arguments": { "threshold": 1000 } }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A JSON-RPC 2.0 response. Tool-level failures are returned here as a result with `isError: true`, not as a JSON-RPC error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/JsonRpcSuccess" },
+                    { "$ref": "#/components/schemas/JsonRpcError" }
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The message was a JSON-RPC notification — any request without an `id`, such as `notifications/initialized`. Accepted with no response body, per JSON-RPC 2.0."
+          },
+          "401": {
+            "description": "`MCP_AUTH_TOKEN` is set and the `Authorization: Bearer <token>` header is missing or wrong. Rejected before JSON-RPC framing, so the body is a plain error object rather than a JSON-RPC envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "error": { "type": "string", "example": "Unauthorized" } },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "404": { "description": "`MCP_ENABLED` is false." }
+        }
+      },
+      "get": {
+        "tags": ["mcp"],
+        "operationId": "getMcpNotAllowed",
+        "summary": "Not allowed — MCP uses POST",
+        "description": "The endpoint is JSON-RPC over POST. GET returns 405 with an `Allow: POST` header; there is no SSE stream to open.",
+        "responses": {
+          "405": {
+            "description": "Use POST.",
+            "headers": {
+              "Allow": { "schema": { "type": "string" }, "example": "POST" }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "error": { "type": "string" } },
+                  "required": ["error"]
+                },
+                "example": { "error": "Method Not Allowed; use POST for JSON-RPC" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "mcpBearerToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The value of `MCP_AUTH_TOKEN` on the Klag instance. When that variable is empty the endpoint is unauthenticated and Klag logs a warning at startup."
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "description": "Health check result. `kafka` is present on readiness responses only.",
+        "properties": {
+          "status": { "type": "string", "enum": ["UP", "DOWN"], "description": "Overall status." },
+          "kafka": { "type": "string", "enum": ["connected", "disconnected"], "description": "Kafka AdminClient connection state." }
+        },
+        "required": ["status"],
+        "additionalProperties": false
+      },
+      "VersionResponse": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string", "description": "Klag version." },
+          "vertxVersion": { "type": "string", "description": "Vert.x version Klag was built against." },
+          "javaVersion": { "type": "string", "description": "Java runtime version, or the GraalVM native image's build JDK." }
+        },
+        "required": ["version", "vertxVersion", "javaVersion"],
+        "additionalProperties": false
+      },
+      "JsonRpcRequest": {
+        "type": "object",
+        "properties": {
+          "jsonrpc": { "type": "string", "const": "2.0" },
+          "id": {
+            "description": "Request id, echoed back. Omit for notifications, which get no response body.",
+            "oneOf": [{ "type": "string" }, { "type": "integer" }]
+          },
+          "method": {
+            "type": "string",
+            "enum": ["initialize", "ping", "notifications/initialized", "tools/list", "tools/call"]
+          },
+          "params": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["jsonrpc", "method"],
+        "additionalProperties": false
+      },
+      "JsonRpcSuccess": {
+        "type": "object",
+        "properties": {
+          "jsonrpc": { "type": "string", "const": "2.0" },
+          "id": { "oneOf": [{ "type": "string" }, { "type": "integer" }, { "type": "null" }] },
+          "result": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["jsonrpc", "id", "result"],
+        "additionalProperties": false
+      },
+      "JsonRpcError": {
+        "type": "object",
+        "description": "JSON-RPC 2.0 error envelope. Codes follow the specification: -32700 parse error, -32600 invalid request, -32601 method not found, -32602 invalid params, -32603 internal error.",
+        "properties": {
+          "jsonrpc": { "type": "string", "const": "2.0" },
+          "id": { "oneOf": [{ "type": "string" }, { "type": "integer" }, { "type": "null" }] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "integer", "description": "JSON-RPC error code." },
+              "message": { "type": "string", "description": "Human-readable description of the failure." }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["jsonrpc", "id", "error"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -26,16 +26,124 @@ head:
     content: |
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Klag",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Linux, macOS, Kubernetes",
-        "description": "Open-source Kafka consumer lag exporter built with Vert.x and Micrometer. Exports lag, lag velocity, hot partitions, time-based lag, and consumer-group state to Prometheus, Datadog, or OTLP.",
-        "url": "https://klag.dev",
-        "codeRepository": "https://github.com/themoah/klag",
-        "programmingLanguage": "Java",
-        "license": "https://www.apache.org/licenses/LICENSE-2.0",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://klag.dev/#software",
+            "name": "Klag",
+            "alternateName": "Klag Kafka Lag Exporter",
+            "applicationCategory": "DeveloperApplication",
+            "applicationSubCategory": "Monitoring",
+            "operatingSystem": "Linux, macOS, Kubernetes",
+            "description": "Open-source Kafka consumer lag exporter built with Vert.x and Micrometer. Exports lag, lag velocity, hot partitions, time-based lag, commit staleness, data-loss risk, and consumer-group state to Prometheus, Datadog, or OTLP.",
+            "url": "https://klag.dev",
+            "downloadUrl": "https://hub.docker.com/r/themoah/klag",
+            "codeRepository": "https://github.com/themoah/klag",
+            "programmingLanguage": "Java",
+            "runtimePlatform": "JVM 21, GraalVM native image",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "featureList": [
+              "Consumer lag per partition, topic, and group",
+              "Lag velocity (growing or shrinking)",
+              "Time-based lag and estimated time to catch up",
+              "Hot partition detection",
+              "Commit staleness / stuck consumer detection",
+              "Data-loss risk against the retention window",
+              "Under-replicated partition (ISR) monitoring",
+              "Read-only MCP endpoint for AI agents"
+            ],
+            "author": { "@id": "https://klag.dev/#organization" },
+            "publisher": { "@id": "https://klag.dev/#organization" },
+            "sameAs": [
+              "https://github.com/themoah/klag",
+              "https://hub.docker.com/r/themoah/klag",
+              "https://artifacthub.io/packages/helm/klag/klag"
+            ]
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://klag.dev/#organization",
+            "name": "Klag",
+            "url": "https://klag.dev",
+            "logo": "https://klag.dev/icon-512.png",
+            "description": "Maintainers of Klag, the open-source Kafka consumer lag exporter.",
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "contactType": "technical support",
+              "url": "https://github.com/themoah/klag/issues",
+              "availableLanguage": "English"
+            },
+            "sameAs": [
+              "https://github.com/themoah/klag",
+              "https://hub.docker.com/r/themoah/klag"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://klag.dev/#website",
+            "url": "https://klag.dev",
+            "name": "Klag",
+            "description": "Documentation for Klag, the Kafka consumer lag exporter.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://klag.dev/#organization" }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://klag.dev/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is Kafka consumer lag?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Consumer lag is the gap between a topic partition's log-end offset and the offset a consumer group has committed. It measures work the group has not acknowledged yet, not work it has finished processing. Growing lag means downstream data is going stale."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How is Klag different from Burrow or KMinion?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Klag exports the raw lag numbers plus derived signals other exporters leave out: lag velocity, time-based lag in milliseconds, hot partition detection, commit staleness for stuck consumers, and retention-window risk. Burrow reports an evaluated status rather than raw metrics; KMinion covers lag and end-to-end latency but not those derived signals. See the comparison pages for a per-tool breakdown."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can Klag replace kafka-lag-exporter?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Klag is a drop-in replacement for the unmaintained Scala/Akka kafka-lag-exporter, keeping equivalent metric names and consumer member labels so existing dashboards and alerts keep working. There is a dedicated migration guide."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do I detect a stuck Kafka consumer?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Watch klag_consumer_commit_staleness_seconds. It reports how long a group has held lag without its committed offset advancing, so it catches a consumer that is alive and assigned but no longer making progress — a failure that a flat lag value alone hides."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What permissions does Klag need on Kafka?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Read-only AdminClient access: DESCRIBE on the cluster's consumer groups and DESCRIBE on the topics they consume. Klag never produces, consumes, or commits offsets."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Klag work with AI agents?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. A Klag instance can expose an opt-in read-only MCP endpoint so an agent can list consumer groups, look up a group's lag, find lagging groups, and run a composite diagnosis. klag.dev also hosts a documentation MCP server at https://klag.dev/mcp for questions about Klag itself."
+                }
+              }
+            ]
+          }
+        ]
       }
 ---
 

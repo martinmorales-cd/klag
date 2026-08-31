@@ -99,6 +99,28 @@ installed payload is 36 KB. Keep the skill thin — it fetches
 `scripts/check-plugin.sh` pins manifest shape and runs in CI. User-facing page:
 `website/src/content/docs/ai/agent-setup.mdx` (`klag.dev/agent-setup`).
 
+## klag.dev agent surface
+
+The site is a Cloudflare **Worker** with static assets (`website/src/worker.ts` +
+`wrangler.jsonc`; there is no Pages project). **Cloudflare Workers Builds** (Git integration
+on the `klag` Worker) publishes on push; `.github/workflows/website.yml` only builds, tests,
+and type-checks. There is deliberately no local deploy script, so never run
+`wrangler deploy` from a working tree. The Worker
+serves a read-only **documentation MCP server at `klag.dev/mcp`** (`search_klag_docs`,
+`get_klag_doc`, `get_klag_config`, `get_klag_metric`), which answers questions *about* Klag
+and must not be confused with a running instance's `/mcp`, which answers questions about a
+user's consumer groups. Keep that distinction in tool descriptions and docs.
+
+Its corpus is generated, never hand-written: `website/scripts/gen-llms.mjs` emits
+`llms.txt`, `llms-full.txt`, a `.md` twin per page, per-section `llms.txt`, and
+`src/generated/docs.json` (the config/metric tables the MCP tools answer from, parsed out of
+the reference tables — a table row that stops matching `| \`NAME\` | ... |` silently drops
+that key). `gen-skills.mjs` serves `plugin/` at `/skills/**` with SHA-256 digests in
+`/.well-known/agent-skills/index.json`, and re-stamps `openapi.json` with the Gradle version.
+Hand-written discovery files live in `website/public/.well-known/`; add new resources to
+`ai-catalog.json` too, or agents will not find them. `/developers/` is the human-facing index
+of all of it.
+
 ## HTTP Endpoints
 
 | Endpoint | Purpose |

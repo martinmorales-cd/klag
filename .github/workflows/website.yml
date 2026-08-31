@@ -1,0 +1,74 @@
+name: Website
+
+# The website is a self-contained surface — Astro build, a Cloudflare Worker, the docs MCP
+# server, and the generators that produce every agent-facing artifact. Every other workflow
+# path-ignores website/**, so without this one it ships untested.
+#
+# Deploy is Cloudflare Workers Builds (Git integration on the klag Worker). This workflow
+# only builds, tests, and type-checks — it does not publish.
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'website/**'
+      - 'plugin/**'          # gen-skills.mjs serves the plugin; a change there changes dist/
+      - '.github/workflows/website.yml'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'website/**'
+      - 'plugin/**'
+      - '.github/workflows/website.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: website/.node-version
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (astro + gen-llms + gen-skills)
+        run: npm run build
+
+      - name: Test generators and MCP tools
+        run: npm test
+
+      - name: Type-check (worker + astro)
+        run: npm run check
+
+      - name: Verify the agent-facing surface exists in dist/
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in \
+            index.html 404.html robots.txt sitemap-index.xml og.png \
+            llms.txt llms-full.txt index.md agents.md pricing.md openapi.json \
+            metrics/llms.txt metrics/lag-velocity.md \
+            skills/klag/SKILL.md \
+            .well-known/ai-catalog.json .well-known/agent-card.json \
+            .well-known/api-catalog .well-known/agent-skills/index.json \
+            .well-known/mcp/server-card.json
+          do
+            if [ ! -f "dist/$f" ]; then echo "MISSING dist/$f"; missing=1; fi
+          done
+          exit $missing
