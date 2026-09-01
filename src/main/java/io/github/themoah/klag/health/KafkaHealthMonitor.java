@@ -49,18 +49,27 @@ public class KafkaHealthMonitor {
     return clusterName;
   }
 
+  /** {@code " [cluster=name]"} when named, else empty so unnamed logs stay unchanged. */
+  private String clusterLog() {
+    if (clusterName == null || clusterName.isBlank()) {
+      return "";
+    }
+    return " [cluster=" + clusterName + "]";
+  }
+
   /**
    * Starts the health monitor with initial check and periodic heartbeat.
    *
    * @return Future that completes when initial health check finishes
    */
   public Future<Void> start() {
-    log.info("Starting Kafka health monitor with heartbeat interval: {}ms", heartbeatIntervalMs);
+    log.info("Starting Kafka health monitor{} with heartbeat interval: {}ms",
+      clusterLog(), heartbeatIntervalMs);
 
     return performHealthCheck()
       .onComplete(ar -> {
         timerId = vertx.setPeriodic(heartbeatIntervalMs, id -> performHealthCheck());
-        log.info("Kafka health monitor started, timer ID: {}", timerId);
+        log.info("Kafka health monitor{} started, timer ID: {}", clusterLog(), timerId);
       })
       .mapEmpty();
   }
@@ -71,7 +80,7 @@ public class KafkaHealthMonitor {
    * @return Future that completes when stopped
    */
   public Future<Void> stop() {
-    log.info("Stopping Kafka health monitor");
+    log.info("Stopping Kafka health monitor{}", clusterLog());
     if (timerId != null) {
       vertx.cancelTimer(timerId);
       timerId = null;
@@ -102,23 +111,23 @@ public class KafkaHealthMonitor {
    * Performs a health check by describing cluster (lightweight metadata operation).
    */
   private Future<Void> performHealthCheck() {
-    log.debug("Performing Kafka health check");
+    log.debug("Performing Kafka health check{}", clusterLog());
 
     return kafkaClient.describeCluster()
       .onSuccess(clusterId -> {
         HealthStatus previous = kafkaStatus.getAndSet(HealthStatus.UP);
         if (previous == HealthStatus.DOWN) {
-          log.info("Kafka connection restored, cluster ID: {}", clusterId);
+          log.info("Kafka connection restored{}, Kafka cluster ID: {}", clusterLog(), clusterId);
         } else {
-          log.debug("Kafka health check passed, cluster ID: {}", clusterId);
+          log.debug("Kafka health check passed{}, Kafka cluster ID: {}", clusterLog(), clusterId);
         }
       })
       .onFailure(err -> {
         HealthStatus previous = kafkaStatus.getAndSet(HealthStatus.DOWN);
         if (previous == HealthStatus.UP) {
-          log.warn("Kafka connection lost: {}", err.getMessage());
+          log.warn("Kafka connection lost{}: {}", clusterLog(), err.getMessage());
         } else {
-          log.debug("Kafka health check failed: {}", err.getMessage());
+          log.debug("Kafka health check failed{}: {}", clusterLog(), err.getMessage());
         }
       })
       .mapEmpty();
